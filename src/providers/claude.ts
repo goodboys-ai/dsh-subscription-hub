@@ -133,7 +133,7 @@ export function detectClaudeVersion(): string {
   }
   // This is debug-only: the fallback is expected when Claude Code is absent.
   if (lastError !== undefined) {
-    console.debug('dsh-plugin-subscriptions: Claude CLI version detection fell back', lastError)
+    console.debug('dsh-subscription-hub: Claude CLI version detection fell back', lastError)
   }
   return CLAUDE_CLI_FALLBACK_VERSION
 }

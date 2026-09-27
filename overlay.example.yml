@@ -4,4 +4,4 @@
 # to THIS checkout's built entry: <absolute-path>/lib/index.js
 - insert:
     - id: llm-subscriptions
-      name: /absolute/path/to/dsh-plugin-subscriptions/lib/index.js
+      name: /absolute/path/to/dsh-subscription-hub/lib/index.js

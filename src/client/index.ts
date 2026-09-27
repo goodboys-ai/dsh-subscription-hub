@@ -67,18 +67,18 @@ export const inject = ['slots', 'connection', 'locale']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-plugin-subscriptions: copy dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-subscription-hub: copy dictionaries')
   // Settings-shell nudge: the panel (nav title + header row + section body)
   // sits flush against the panel's top edge; push it down a little to leave
   // breathing room. Scoped by the settings panel's own dialog role + nav child
   // so other aria-modal dialogs (e.g. the attachment lightbox) are untouched.
   ctx.effect(() => {
     const style = document.createElement('style')
-    style.setAttribute('data-plugin', 'dsh-plugin-subscriptions')
+    style.setAttribute('data-plugin', 'dsh-subscription-hub')
     style.textContent = 'div[role="dialog"][aria-modal="true"]:has(> nav) { padding-top: 14px; }'
     document.head.appendChild(style)
     return () => style.remove()
-  }, 'dsh-plugin-subscriptions: settings panel breathing room')
+  }, 'dsh-subscription-hub: settings panel breathing room')
   // The shell's Context merge types `connection` as the host handle; in the
   // browser shell the same key holds the full client ConnectionHandle.
   const connection = ctx.get('connection') as unknown as ConnectionHandle
@@ -180,6 +180,6 @@ export function apply(ctx: ClientContext): void {
           await createSpeedSetter(connection, session.sessionId)(option.id as 'standard' | 'fast')
         },
       },
-    }), 'dsh-plugin-subscriptions: /fast contribution')
+    }), 'dsh-subscription-hub: /fast contribution')
   })
 }

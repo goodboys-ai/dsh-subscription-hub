@@ -1,10 +1,10 @@
 /**
- * dsh-plugin-subscriptions: register OAuth-subscription LLM providers
+ * dsh-subscription-hub: register OAuth-subscription LLM providers
  * (ChatGPT/Codex, Claude, Grok, GitHub Copilot, Google Antigravity) on `ctx.llm`, and expose the `/subscriptions-auth`
  * RPC channel the web Settings page uses to run the logins. The token store
  * lives at `~/.dsh/plugins/subscriptions/auth.json`; the channel registers only when
  * a host `connection` service exists, so headless compositions load fine.
- * @module dsh-plugin-subscriptions
+ * @module dsh-subscription-hub
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -137,7 +137,7 @@ export type { RateLimitConfig, RateLimitWait } from './providers/rate-limit.js'
 export type { ProviderStatus } from './auth/rpc.js'
 export type { AntigravitySession, ClaudeSession, CodexSession, CopilotSession, GrokSession, ProviderId } from './auth/store.js'
 
-export const name = 'dsh-plugin-subscriptions'
+export const name = 'dsh-subscription-hub'
 export const inject = ['llm']
 
 /** Default maximum provider idle time while one stream read is outstanding. */
@@ -625,7 +625,7 @@ export function apply(ctx: Context, config: Config): void {
   // refresh) must survive links where one TCP handshake exceeds Node's 250ms
   // Happy Eyeballs attempt budget; see MIN_CONNECT_ATTEMPT_TIMEOUT_MS.
   const previousAttemptTimeout = ensureConnectAttemptTimeout()
-  ctx.effect(() => () => { restoreConnectAttemptTimeout(previousAttemptTimeout) }, 'dsh-plugin-subscriptions: connect attempt timeout')
+  ctx.effect(() => () => { restoreConnectAttemptTimeout(previousAttemptTimeout) }, 'dsh-subscription-hub: connect attempt timeout')
   const preferences = new ProviderSettingsStore()
   const codexVersion = new CodexClientVersionCache()
   const providers = [...new Set(config.providers ?? [...PROVIDER_IDS])]
@@ -644,7 +644,7 @@ export function apply(ctx: Context, config: Config): void {
   const flows = new OAuthFlowManager()
   const deviceFlows = new DeviceFlowManager()
   const onWarn = (message: string): void => {
-    ctx.logger.warn(`dsh-plugin-subscriptions: ${message}`)
+    ctx.logger.warn(`dsh-subscription-hub: ${message}`)
   }
   // Optional: resolves ImageBlock references to bytes for vision-capable
   // models. Resolved per request — the attachments service may start after
@@ -1183,7 +1183,7 @@ export function apply(ctx: Context, config: Config): void {
         }
       }, () => undefined)
     }, 5 * 60_000)
-    ctx.effect(() => () => { clearInterval(syncTimer) }, 'dsh-plugin-subscriptions: claude background sync timer')
+    ctx.effect(() => () => { clearInterval(syncTimer) }, 'dsh-subscription-hub: claude background sync timer')
   }
 
   // `web` is optional on headless/minimal compositions. Register Codex behind
@@ -1250,6 +1250,7 @@ export function apply(ctx: Context, config: Config): void {
         if (registered !== undefined) deny.push(registered)
       }
       if (deny.length) agent.ctx.tools.restrict({ deny })
+      return undefined
     })
   })
 }

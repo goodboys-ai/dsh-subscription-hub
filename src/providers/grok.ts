@@ -145,7 +145,7 @@ export async function grokFlow(): Promise<FlowSpec> {
         state,
         nonce,
         plan: 'generic',
-        referrer: 'dsh-plugin-subscriptions',
+        referrer: 'dsh-subscription-hub',
       })
       return `${discovery.authorizationEndpoint}?${params.toString()}`
     },

@@ -8,7 +8,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ConnectionRpcHandler, HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
+import type { HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import type { RpcResult } from '../compat.js'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -225,6 +225,9 @@ interface FetchRouteCompat {
 }
 
 type FetchRegisterCompat = (route: FetchRouteCompat) => () => Promise<void>
+
+/** The private exact-route bridge uses only the endpoint, payload, and signal. */
+type ConnectionRpcHandler = (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>
 
 /** Connection `client-request` envelope, as the browser rpc caller sends it. */
 interface ClientRequestEnvelope {
@@ -634,7 +637,7 @@ export function registerAuthRpc(
     for (const endpoint of SUBSCRIPTIONS_AUTH_ENDPOINTS) {
       ctx.effect(
         () => register(fetchRouteFor(endpoint, handler)),
-        `dsh-plugin-subscriptions: /api/${SUBSCRIPTIONS_AUTH_PREFIX}${endpoint} route`,
+        `dsh-subscription-hub: /api/${SUBSCRIPTIONS_AUTH_PREFIX}${endpoint} route`,
       )
     }
   })

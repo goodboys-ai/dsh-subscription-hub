@@ -7,7 +7,7 @@
  */
 
 import { LlmError } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, Message, ToolResultBlock } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, Message, RequestMessage } from '@deepseek-ai/dsh-llm'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 
 /** An image block with its bytes resolved to inline base64 for the wire. */
@@ -20,10 +20,13 @@ export interface ResolvedImagePart {
 }
 
 /** Translator input block: a harness block, with images pre-resolved. */
-export type TranslatableBlock = Exclude<ContentBlock, ToolResultBlock> | ResolvedImagePart | ResolvedToolResultBlock
+export type TranslatableBlock = ContentBlock | ResolvedImagePart | ResolvedToolResultBlock
 
 /** Tool results may themselves carry attachment-backed images. */
-export interface ResolvedToolResultBlock extends Omit<ToolResultBlock, 'content'> {
+export interface ResolvedToolResultBlock {
+  type: 'tool-result'
+  toolCallId: string
+  isError?: boolean
   content: readonly TranslatableBlock[]
 }
 
@@ -74,27 +77,21 @@ export interface TranslatableMessage {
  * @returns the same messages with image blocks resolved for the translators.
  */
 export async function resolveImages(
-  messages: readonly Message[],
+  messages: readonly RequestMessage[],
   attachments: AttachmentStore | undefined,
   signal?: AbortSignal,
 ): Promise<readonly TranslatableMessage[]> {
-  const hasImage = (block: ContentBlock): boolean => block.type === 'image'
-    || (block.type === 'tool-result' && block.content.some(hasImage))
-  if (!messages.some(message => message.content.some(hasImage))) {
-    return messages
-  }
-  if (attachments === undefined) {
+  const hasImage = messages.some(message => message.content.some(block => block.type === 'image'))
+  if (hasImage && attachments === undefined) {
     throw new LlmError(
-      'dsh-plugin-subscriptions: the request carries an image but no attachments service is mounted; '
+      'dsh-subscription-hub: the request carries an image but no attachments service is mounted; '
       + 'image input requires the harness attachment store',
       'UNSUPPORTED',
     )
   }
   const resolveBlock = async (block: ContentBlock): Promise<TranslatableBlock[]> => {
-    if (block.type === 'tool-result') {
-      return [{ ...block, content: (await Promise.all(block.content.map(resolveBlock))).flat() }]
-    }
     if (block.type !== 'image') return [block]
+    if (attachments === undefined) throw new Error('attachments service is unavailable')
     const stored = await attachments.readImage(block.attachment, signal)
     const { attachmentId, mediaType, bytes, width, height, name } = stored.ref
     return [{
@@ -108,9 +105,22 @@ export async function resolveImages(
       })}`,
     }]
   }
-  return Promise.all(messages.map(async (message): Promise<TranslatableMessage> => ({
-    role: message.role,
-    source: message.source,
-    content: (await Promise.all(message.content.map(resolveBlock))).flat(),
-  })))
+  return Promise.all(messages.map(async (message): Promise<TranslatableMessage> => {
+    const content = (await Promise.all(message.content.map(resolveBlock))).flat()
+    if (message.role === 'tool') {
+      return {
+        role: 'user',
+        source: message.source,
+        content: [{
+          type: 'tool-result', toolCallId: message.toolCallId,
+          ...message.isError === undefined ? {} : { isError: message.isError }, content,
+        }],
+      }
+    }
+    return {
+      role: message.role === 'developer' ? 'system' : message.role,
+      ...message.source === undefined ? {} : { source: message.source },
+      content,
+    }
+  }))
 }
