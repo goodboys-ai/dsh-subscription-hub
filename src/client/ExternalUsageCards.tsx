@@ -6,9 +6,9 @@ import { callSubscriptionsAuth } from './subscriptions-rpc.js'
 type Source = 'opencode-go' | 'kimi-code'
 type Translate = SubscriptionsSectionInjected['t']
 
-const SOURCES: readonly { id: Source; name: string }[] = [
-  { id: 'opencode-go', name: 'OpenCode Go' },
-  { id: 'kimi-code', name: 'Kimi Code' },
+const SOURCES: readonly { id: Source; name: string; ref: string }[] = [
+  { id: 'opencode-go', name: 'OpenCode Go', ref: 'OPENCODE_GO_API_KEY' },
+  { id: 'kimi-code', name: 'Kimi Code', ref: 'KIMI_CODE_API_KEY' },
 ]
 
 type Status = Record<Source, { configured: boolean }>
@@ -44,24 +44,30 @@ export function ExternalUsageCards({ rpc, t }: { rpc: ConnectionHandle['rpc']; t
     }
   }, [rpc])
 
-  useEffect(() => {
-    let cancelled = false
-    void callSubscriptionsAuth<Status>(rpc, 'externalStatus', {}).then(value => {
-      if (cancelled) return
+  const refreshStatus = useCallback(async () => {
+    try {
+      const value = await callSubscriptionsAuth<Status>(rpc, 'externalStatus', {})
       setStatus(value)
+      setStatusError(undefined)
       for (const { id } of SOURCES) if (value[id]?.configured) void refresh(id)
-    }, error => {
-      if (!cancelled) setStatusError(errorText(error))
-    })
-    return () => { cancelled = true }
+    } catch (error) { setStatusError(errorText(error)) }
   }, [rpc, refresh])
 
+  useEffect(() => {
+    void refreshStatus()
+  }, [refreshStatus])
+
   return <section style={{ display: 'grid', gap: 12 }}>
-    <strong style={{ color: 'var(--dsw-alias-label-primary)' }}>{t('externalUsageTitle')}</strong>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <strong style={{ color: 'var(--dsw-alias-label-primary)' }}>{t('externalUsageTitle')}</strong>
+      <button type="button" style={{ marginLeft: 'auto' }} onClick={() => { void refreshStatus() }}>
+        {t('usageRefresh')}
+      </button>
+    </div>
     {statusError !== undefined && <p style={{ color: 'var(--dsw-alias-state-error-primary)' }}>
       {t('externalUsageUnavailable', { message: statusError })}
     </p>}
-    {SOURCES.map(({ id, name }) => {
+    {SOURCES.map(({ id, name, ref }) => {
       const configured = status?.[id]?.configured === true
       const snapshot = usage[id]
       return <div key={id} style={{
@@ -76,7 +82,7 @@ export function ExternalUsageCards({ rpc, t }: { rpc: ConnectionHandle['rpc']; t
           </button>}
         </div>
         {status === undefined && statusError === undefined && <p>{t('usageLoading')}</p>}
-        {status !== undefined && !configured && <p>{t('externalUsageConfigure')}</p>}
+        {status !== undefined && !configured && <p>{t('externalUsageConfigure', { ref })}</p>}
         {configured && loading[id] === true && snapshot === undefined && <p>{t('usageLoading')}</p>}
         {errors[id] !== undefined && <p style={{ color: 'var(--dsw-alias-state-error-primary)' }}>
           {t('usageError', { message: errors[id] })}
@@ -85,7 +91,8 @@ export function ExternalUsageCards({ rpc, t }: { rpc: ConnectionHandle['rpc']; t
         {snapshot?.windows?.map((window, index) => {
           const percent = Math.min(100, Math.max(0, window.usedPercent))
           const label = window.kind === 'session' ? t('usageSession')
-            : window.kind === 'weekly' ? t('usageWeekly') : window.scope ?? t('usageWindow')
+            : window.kind === 'weekly' ? t('usageWeekly')
+              : window.scope === 'Monthly' ? t('usageMonthly') : window.scope ?? t('usageWindow')
           return <div key={index} style={{ marginTop: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <span>{label}</span>
