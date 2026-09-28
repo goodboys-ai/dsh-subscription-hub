@@ -4,8 +4,7 @@ import { test } from 'node:test'
 import { ToolCallId } from '../src/compat.js'
 import { AccountTokenManager } from '../src/providers/accounts.js'
 import assert from 'node:assert/strict'
-import { MessageId } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, GenerateOptions, Message, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { AntigravitySession } from '../src/auth/store.js'
 import {
   AntigravityAdapter,
@@ -26,7 +25,7 @@ import {
   streamAntigravity,
   toAntigravityRequest,
 } from '../src/translate/antigravity.js'
-import type { TranslatableMessage } from '../src/translate/resolved.js'
+import type { TranslatableBlock, TranslatableMessage } from '../src/translate/resolved.js'
 
 const oauth = { clientId: 'test-client.apps.example.invalid', clientSecret: 'test-secret' }
 const runtime = { baseURL: 'https://antigravity.example.invalid', onboard: false }
@@ -56,9 +55,8 @@ function routed(routes: Record<string, unknown | Response>, calls: RecordedCall[
   }
 }
 
-function message(role: Message['role'], content: ContentBlock[], source?: Message['source']): Message {
+function message(role: TranslatableMessage['role'], content: TranslatableBlock[], source?: TranslatableMessage['source']): TranslatableMessage {
   return {
-    id: MessageId(`m-${Math.random().toString(36).slice(2)}`),
     role,
     content,
     source: source ?? (role === 'assistant'
@@ -67,11 +65,11 @@ function message(role: Message['role'], content: ContentBlock[], source?: Messag
   }
 }
 
-function options(messages: Message[]): GenerateOptions {
+function options(): GenerateOptions {
   return {
     provider: 'antigravity',
     model: 'gemini-3-flash',
-    messages,
+    messages: [],
     system: 'Be useful.',
     maxTokens: 2048,
     temperature: 0.2,
@@ -194,7 +192,7 @@ test('request conversion carries system, images, tools, tool results, and signed
       content: [{ type: 'image', mediaType: 'image/png', dataBase64: 'aGVsbG8=' }],
     },
   ]
-  const payload = toAntigravityRequest(options(messages as Message[]), messages, 'project-123')
+  const payload = toAntigravityRequest(options(), messages, 'project-123')
   assert.equal(payload.project, 'project-123')
   assert.equal(payload.request.systemInstruction?.parts[0].text, 'Be useful.')
   assert.equal(payload.request.tools?.[0].functionDeclarations[0].name, 'bash')
@@ -209,7 +207,7 @@ test('request conversion carries system, images, tools, tool results, and signed
     ['null', { output: null }],
     ['42', { output: 42 }],
   ] as const) {
-    const resultPayload = toAntigravityRequest(options([]), [
+    const resultPayload = toAntigravityRequest(options(), [
       message('assistant', [{ type: 'tool-call', id: ToolCallId('array-call'), name: 'bash', arguments: '{}' }]),
       message('user', [{ type: 'tool-result', toolCallId: ToolCallId('array-call'), content: [{ type: 'text', text: content }] }]),
     ], 'project-123')
@@ -275,7 +273,7 @@ test('streamGenerateContent SSE and generateContent URL/forwarding are both supp
   assert.deepEqual(streamed.map(chunk => chunk.type), ['block-start', 'text-delta', 'block-end', 'finish'])
 
   const calls: RecordedCall[] = []
-  const payload = toAntigravityRequest(options([message('user', [{ type: 'text', text: 'hi' }])]), [
+  const payload = toAntigravityRequest(options(), [
     message('user', [{ type: 'text', text: 'hi' }]),
   ], session.projectId)
   await requestAntigravityContent(session, payload, false, runtime, routed({
@@ -336,7 +334,7 @@ test('Antigravity resolves per-model output defaults and bounds configured defau
   for (const [model, limit] of Object.entries(limits)) {
     const info = await adapter.resolveOwnModel('antigravity', model, 'alice')
     assert.equal(info.defaultMaxTokens, limit)
-    const payload = toAntigravityRequest({ ...options([]), model, maxTokens: info.defaultMaxTokens }, [], session.projectId, true)
+    const payload = toAntigravityRequest({ ...options(), model, maxTokens: info.defaultMaxTokens }, [], session.projectId, true)
     assert.equal(payload.request.generationConfig?.maxOutputTokens, limit)
   }
   assert.equal(fetches, 1, 'successive model resolutions reuse the catalog')
@@ -445,7 +443,7 @@ test('Antigravity retries a 401 with the selected account and refreshed project'
     },
   })
   const chunks: StreamChunk[] = []
-  for await (const chunk of adapter.streamAccount(options([]), 'bob')) chunks.push(chunk)
+  for await (const chunk of adapter.streamAccount(options(), 'bob')) chunks.push(chunk)
   assert.deepEqual(refreshed, ['bob'])
   assert.deepEqual(calls, [
     { token: 'Bearer bob', project: 'project-bob' },
@@ -474,7 +472,7 @@ test('Antigravity preserves tool-result images after parallel tool responses', (
       { type: 'text', text: 'screenshot' }, { type: 'image', mediaType: 'image/png', dataBase64: 'aW1hZ2U=' },
     ] }] },
   ]
-  const parts = toAntigravityRequest(options([]), messages, session.projectId).request.contents.flatMap(content => content.parts)
+  const parts = toAntigravityRequest(options(), messages, session.projectId).request.contents.flatMap(content => content.parts)
   const responseIndex = parts.findIndex(part => part.functionResponse)
   const imageIndex = parts.findIndex(part => part.inlineData)
   assert.ok(responseIndex >= 0 && imageIndex > responseIndex)
@@ -510,13 +508,13 @@ test('Antigravity fails over between accounts through the shared pool before emi
   })
   assert.equal((await adapter.resolveModel('antigravity', 'gemini-3-flash')).id, 'gemini-3-flash')
   const chunks: StreamChunk[] = []
-  for await (const chunk of adapter.stream(options([]))) chunks.push(chunk)
+  for await (const chunk of adapter.stream(options())) chunks.push(chunk)
   assert.deepEqual(visited, ['Bearer alice', 'Bearer bob'])
   assert.equal(chunks.at(-1)?.type, 'finish')
 })
 
 test('Antigravity uses JSON Schema for Gemini and a detached custom-tool subset for Claude', () => {
-  const input = options([])
+  const input = options()
   input.tools = [{ name: 'inspect', description: 'inspect', parameters: {
     $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
     $defs: { path: { type: ['string', 'null'], description: 'path', minLength: 1 } },
@@ -544,7 +542,7 @@ test('Antigravity rejects unresolved and recursive tool references before provid
     { type: 'object', properties: { path: { $ref: '#/$defs/missing' } } },
     { type: 'object', $defs: { node: { $ref: '#/$defs/node' } }, properties: { node: { $ref: '#/$defs/node' } } },
   ]) {
-    assert.throws(() => toAntigravityRequest({ ...options([]), tools: [{ name: 'test', description: '', parameters }] }, [], session.projectId), /reference/)
+    assert.throws(() => toAntigravityRequest({ ...options(), tools: [{ name: 'test', description: '', parameters }] }, [], session.projectId), /reference/)
   }
 })
 
@@ -554,11 +552,11 @@ test('Antigravity reasoning uses supported runtime budgets and rejects unsupport
     ['gemini-3-flash', 'high', -1], ['gemini-3.1-pro-high', 'high', 10001],
     ['claude-sonnet-4-6', 'high', 1024], ['gpt-oss-120b', 'medium', 8192],
   ] as const) {
-    const payload = toAntigravityRequest({ ...options([]), model, reasoningEffort: ReasoningEffortId(effort), maxTokens: 20000 }, [], session.projectId)
+    const payload = toAntigravityRequest({ ...options(), model, reasoningEffort: ReasoningEffortId(effort), maxTokens: 20000 }, [], session.projectId)
     assert.deepEqual(payload.request.generationConfig?.thinkingConfig, { includeThoughts: true, thinkingBudget: budget })
   }
-  assert.throws(() => toAntigravityRequest({ ...options([]), model: 'claude-sonnet-4-6', reasoningEffort: ReasoningEffortId('high'), maxTokens: 512 }, [], session.projectId), /thinking budget/)
-  assert.throws(() => toAntigravityRequest({ ...options([]), reasoningEffort: ReasoningEffortId('ultra') }, [], session.projectId), /does not support/)
+  assert.throws(() => toAntigravityRequest({ ...options(), model: 'claude-sonnet-4-6', reasoningEffort: ReasoningEffortId('high'), maxTokens: 512 }, [], session.projectId), /thinking budget/)
+  assert.throws(() => toAntigravityRequest({ ...options(), reasoningEffort: ReasoningEffortId('ultra') }, [], session.projectId), /does not support/)
   const { tokens } = accountTokens()
   const adapter = new AntigravityAdapter({ tokens, models: [], discovery: false, streamIdleTimeoutMs: 1000, defaultEffortOf: () => 'high' })
   const info = await adapter.resolveModel('antigravity', 'gemini-3-flash')
@@ -567,13 +565,13 @@ test('Antigravity reasoning uses supported runtime budgets and rejects unsupport
 })
 
 test('Claude streaming caps maxOutputTokens at 64000 to avoid INVALID_ARGUMENT on high limits', () => {
-  const claudeStream = toAntigravityRequest({ ...options([]), model: 'claude-opus-4-6-thinking', maxTokens: 65536 }, [], session.projectId, true)
+  const claudeStream = toAntigravityRequest({ ...options(), model: 'claude-opus-4-6-thinking', maxTokens: 65536 }, [], session.projectId, true)
   assert.equal(claudeStream.request.generationConfig?.maxOutputTokens, 64000)
-  const claudeNonStream = toAntigravityRequest({ ...options([]), model: 'claude-opus-4-6-thinking', maxTokens: 65536 }, [], session.projectId, false)
+  const claudeNonStream = toAntigravityRequest({ ...options(), model: 'claude-opus-4-6-thinking', maxTokens: 65536 }, [], session.projectId, false)
   assert.equal(claudeNonStream.request.generationConfig?.maxOutputTokens, 65536)
-  const geminiStream = toAntigravityRequest({ ...options([]), model: 'gemini-3-flash', maxTokens: 65536 }, [], session.projectId, true)
+  const geminiStream = toAntigravityRequest({ ...options(), model: 'gemini-3-flash', maxTokens: 65536 }, [], session.projectId, true)
   assert.equal(geminiStream.request.generationConfig?.maxOutputTokens, 65536)
-  const claudeStreamLow = toAntigravityRequest({ ...options([]), model: 'claude-sonnet-4-6', maxTokens: 2048 }, [], session.projectId, true)
+  const claudeStreamLow = toAntigravityRequest({ ...options(), model: 'claude-sonnet-4-6', maxTokens: 2048 }, [], session.projectId, true)
   assert.equal(claudeStreamLow.request.generationConfig?.maxOutputTokens, 2048)
 })
 
@@ -592,12 +590,12 @@ test('Gemini 3 marks unsigned foreign tool-call steps during a model switch', ()
     ]),
     message('assistant', [{ type: 'tool-call', id: ToolCallId('foreign-3'), name: 'run_code', arguments: '{}' }], foreignSource),
   ]
-  const calls = toAntigravityRequest(options([]), messages, session.projectId).request.contents
+  const calls = toAntigravityRequest(options(), messages, session.projectId).request.contents
     .flatMap(content => content.parts).filter(part => part.functionCall)
   assert.equal(calls[0].thoughtSignature, 'skip_thought_signature_validator')
   assert.equal(calls[1].thoughtSignature, undefined)
   assert.equal(calls[2].thoughtSignature, 'skip_thought_signature_validator')
-  const gemini2 = toAntigravityRequest({ ...options([]), model: 'gemini-2.5-pro' }, messages, session.projectId)
+  const gemini2 = toAntigravityRequest({ ...options(), model: 'gemini-2.5-pro' }, messages, session.projectId)
   assert.equal(gemini2.request.contents.flatMap(content => content.parts).find(part => part.functionCall)?.thoughtSignature, undefined)
 })
 
@@ -609,18 +607,18 @@ test('Antigravity replays signed text and reasoning only for the same provider a
     ] },
   }
   const messages = [message('assistant', [{ type: 'reasoning', text: 'thought' }, { type: 'text', text: 'answer' }], source)]
-  const payload = toAntigravityRequest(options(messages), messages, session.projectId)
+  const payload = toAntigravityRequest(options(), messages, session.projectId)
   assert.deepEqual(payload.request.contents[0].parts, [
     { thought: true, text: 'thought', thoughtSignature: 'reasoning-signature' },
     { text: 'answer', thoughtSignature: 'text-signature' },
   ])
-  const changed = toAntigravityRequest({ ...options(messages), model: 'claude-sonnet-4-6' }, messages, session.projectId)
+  const changed = toAntigravityRequest({ ...options(), model: 'claude-sonnet-4-6' }, messages, session.projectId)
   assert.deepEqual(changed.request.contents[0].parts, [{ text: 'answer' }])
 })
 
 test('Antigravity falls back from daily to production before streaming on endpoint failure', async () => {
   const calls: string[] = []
-  const payload = toAntigravityRequest(options([]), [], session.projectId)
+  const payload = toAntigravityRequest(options(), [], session.projectId)
   const response = await requestAntigravityContent(session, payload, true, {}, async (input, init) => {
     calls.push(String(input))
     assert.deepEqual(JSON.parse(String(init?.body)), payload)
@@ -634,7 +632,7 @@ test('Antigravity falls back from daily to production before streaming on endpoi
 })
 
 test('Antigravity does not route around auth, quota, explicit endpoints, or cancellation', async () => {
-  const payload = toAntigravityRequest(options([]), [], session.projectId)
+  const payload = toAntigravityRequest(options(), [], session.projectId)
   for (const status of [400, 401, 403, 429]) {
     let calls = 0
     const response = await requestAntigravityContent(session, payload, false, {}, async () => { calls++; return new Response('', { status }) })

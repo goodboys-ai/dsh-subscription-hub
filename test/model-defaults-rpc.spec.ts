@@ -13,9 +13,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
 import type { RpcResult } from '../src/compat.js'
 import { createFakeConnection } from './fake-connection.js'
+import type { FakeConnectionHandler } from './fake-connection.js'
 import { CodexAdapter } from '../src/providers/codex.js'
 const clearCodexCatalog = CodexAdapter.prototype.clearAccountCatalog
 
@@ -39,7 +39,7 @@ interface FakeLlm {
  * of them. Each mount also resets the store and deletes the file, so the cases
  * below are independent — they used to pass only in their written order.
  */
-async function mount(options: { tier?: string } = {}): Promise<{ handler: ConnectionRpcHandler; fake: FakeLlm }> {
+async function mount(options: { tier?: string } = {}): Promise<{ handler: FakeConnectionHandler; fake: FakeLlm }> {
   process.env.DSH_HOME = HOME
   assert.ok(modelDefaultsFilePath().startsWith(HOME), 'the store resolves inside this spec\'s temp home')
   await resetModelDefaultsForTests()
@@ -88,7 +88,7 @@ async function mount(options: { tier?: string } = {}): Promise<{ handler: Connec
 }
 
 async function call(
-  handler: ConnectionRpcHandler,
+  handler: FakeConnectionHandler,
   endpoint: string,
   payload: unknown,
 ): Promise<RpcResult<unknown>> {

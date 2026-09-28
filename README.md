@@ -6,7 +6,7 @@ This project starts from [V1ki/dsh-plugin-subscriptions](https://github.com/V1ki
 
 ## Migration status
 
-The first milestone is to port the existing Codex, Claude, Grok, Copilot, and Antigravity providers to DSH `0.1.7-rc.2`. The source build passes with that release's package types. The existing test fixtures still need conversion to DSH's new tool-result message format, and runtime compatibility has not yet been established.
+The existing Codex, Claude, Grok, Copilot, and Antigravity providers have been ported to DSH `0.1.7-rc.2`. The source build and all 506 tests pass. An isolated DSH `0.1.7-rc.2` web profile boots with the plugin, serves the client bundle, and responds to the subscriptions auth-status RPC. Live provider sign-in and model requests have not yet been exercised.
 
 Later milestones will add Cursor using [orrinzeng/dsh-cursor-subscription](https://github.com/orrinzeng/dsh-cursor-subscription), followed by usage-only readers for OpenCode Go and Kimi Code. Those additions are not part of the current build.
 

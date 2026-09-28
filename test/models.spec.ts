@@ -617,20 +617,18 @@ test('codexRequestBody bounds tool-call ids without losing their pairings', () =
   assert.notEqual(collisionIds[0], collisionIds[2])
 })
 
-/** One text-only message of any role, for request-body assembly. */
-function claudeMessage(id: string, role: Message['role'], text: string): Message {
-  return {
-    id: MessageId(id),
-    role,
-    content: [{ type: 'text', text }],
-    source: role === 'assistant'
-      ? { kind: 'model', provider: 'claude', model: 'claude-opus-5' }
-      : { kind: 'user' },
-  }
+/** One text-only conversation message for request-body assembly. */
+type ConversationMessage = Extract<Message, { role: 'system' | 'user' | 'assistant' }>
+function claudeMessage(id: string, role: 'system' | 'user' | 'assistant', text: string): ConversationMessage {
+  const messageId = MessageId(id)
+  const content = [{ type: 'text' as const, text }]
+  if (role === 'system') return { id: messageId, role, content, source: { kind: 'system-prompt' } }
+  if (role === 'assistant') return { id: messageId, role, content, source: { kind: 'model', provider: 'claude', model: 'claude-opus-5' } }
+  return { id: messageId, role, content, source: { kind: 'user' } }
 }
 
 test('claudeRequestBody ships the cache breakpoints and never exceeds four', () => {
-  const history: Message[] = [claudeMessage('s0', 'system', 'opening')]
+  const history: ConversationMessage[] = [claudeMessage('s0', 'system', 'opening')]
   for (let turn = 0; turn < 16; turn++) {
     history.push(claudeMessage(`u${turn}`, 'user', `q${turn}`))
     history.push(claudeMessage(`a${turn}`, 'assistant', `r${turn}`))
@@ -668,7 +666,7 @@ test('claudeRequestBody ships the cache breakpoints and never exceeds four', () 
 })
 
 test('claudeRequestBody omits tools, thinking and effort when the request carries none', () => {
-  const history: Message[] = [claudeMessage('u0', 'user', 'hi')]
+  const history: ConversationMessage[] = [claudeMessage('u0', 'user', 'hi')]
   const body = claudeRequestBody({ provider: 'claude', model: 'claude-opus-5', messages: history }, history, 32_000)
   assert.equal('tools' in body, false)
   assert.equal('thinking' in body, false)

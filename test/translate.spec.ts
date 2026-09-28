@@ -6,9 +6,11 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
+import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { LlmError, MessageId } from '@deepseek-ai/dsh-llm'
 import { ToolCallId } from '../src/compat.js'
-import type { ContentBlock, Message, MessageSource, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, Message, RequestMessage, StreamChunk, ToolResultMessage } from '@deepseek-ai/dsh-llm'
 import {
   ResponsesStreamTranslator,
   toResponsesInput,
@@ -24,33 +26,67 @@ import {
   toAnthropicTools,
 } from '../src/translate/anthropic.js'
 import type { AnthropicMessage, AnthropicStreamEvent } from '../src/translate/anthropic.js'
-import { resolveImages, type TranslatableMessage } from '../src/translate/resolved.js'
+import { resolveImages, type TranslatableBlock, type TranslatableMessage } from '../src/translate/resolved.js'
 import { toChatMessages } from '../src/translate/chat-completions.js'
 
 let messageCounter = 0
 
-/** Build a bare message without touching the frozen constructors. */
+/**
+ * Pure-translator fixture. Translators still consume the legacy projection:
+ * system, user, and assistant messages, with tool results as user-role blocks.
+ */
 function message(
-  role: Message['role'],
-  content: ContentBlock[],
-  source?: MessageSource,
-): Message {
-  const resolvedSource = source ?? (role === 'assistant'
-    ? { kind: 'model' as const, provider: 'codex', model: 'gpt-5.1-codex' }
-    : { kind: 'user' as const })
-  return { id: MessageId(`m-${++messageCounter}`), role, content, source: resolvedSource }
+  role: TranslatableMessage['role'],
+  content: readonly TranslatableBlock[],
+  source?: Message['source'],
+): TranslatableMessage {
+  return { role, content, ...source === undefined ? {} : { source } }
 }
 
 function toolCall(id: string, name: string, args: string): ContentBlock {
   return { type: 'tool-call', id: ToolCallId(id), name, arguments: args }
 }
 
-function toolResult(callId: string, text: string, isError?: boolean): ContentBlock {
+function toolResult(callId: string, text: string, isError?: boolean): TranslatableBlock {
   return {
     type: 'tool-result',
     toolCallId: ToolCallId(callId),
     content: [{ type: 'text', text }],
     ...isError === undefined ? {} : { isError },
+  }
+}
+
+/** Durable image reference for a request-boundary ImageBlock. */
+function imageRef(attachmentId: string, bytes: number): ImageAttachmentRef {
+  return {
+    attachmentId: AttachmentId(attachmentId),
+    mediaType: 'image/png',
+    bytes,
+    width: 1,
+    height: 1,
+  }
+}
+
+/** Request-boundary assistant message with the source a model message requires. */
+function requestAssistant(content: readonly ContentBlock[]): RequestMessage {
+  return {
+    id: MessageId(`m-${++messageCounter}`),
+    role: 'assistant',
+    content,
+    source: { kind: 'model', provider: 'codex', model: 'gpt-5.1-codex' },
+  }
+}
+
+/** Request-boundary tool result: one first-class role=tool message. */
+function requestToolResult(callId: string, content: readonly ContentBlock[], isError = false): ToolResultMessage {
+  const toolCallId = ToolCallId(callId)
+  return {
+    id: MessageId(`m-${++messageCounter}`),
+    role: 'tool',
+    toolCallId,
+    source: { kind: 'tool', callId: toolCallId },
+    content,
+    isError,
   }
 }
 
@@ -180,13 +216,17 @@ test('toResponsesInput: resolved image parts become input_image data URLs', () =
 })
 
 test('resolveImages: passthrough, loud failure without attachments, and resolution', async () => {
-  const plain = [message('user', [{ type: 'text', text: 'hi' }])]
-  assert.equal(await resolveImages(plain, undefined), plain, 'no images → same array, no service needed')
+  const plain: RequestMessage[] = [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }]
+  assert.deepEqual(
+    await resolveImages(plain, undefined),
+    [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    'no images → user text passes through, no service needed',
+  )
 
-  const withImage = [message('user', [{
-    type: 'image',
-    attachment: { attachmentId: 'a1', mediaType: 'image/png', bytes: 3, width: 1, height: 1 },
-  } as never])]
+  const withImage: RequestMessage[] = [{
+    role: 'user',
+    content: [{ type: 'image', attachment: imageRef('a1', 3) }],
+  }]
   await assert.rejects(
     () => resolveImages(withImage, undefined),
     (error: unknown) => error instanceof LlmError && error.code === 'UNSUPPORTED',
@@ -201,14 +241,43 @@ test('resolveImages: passthrough, loud failure without attachments, and resoluti
   assert.match((resolved[0].content[1] as { text: string }).text, /"attachmentId":"a1"/)
 })
 
+test('resolveImages projects a DSH role=tool result into the legacy translator shape', async () => {
+  // The request boundary is a first-class tool message. Translators still see
+  // one user message whose content is a tool-result block.
+  const callId = ToolCallId('call-1')
+  const resolved = await resolveImages([
+    requestToolResult('call-1', [{ type: 'text', text: 'file-a\nfile-b' }]),
+  ], undefined)
+  assert.deepEqual(resolved, [{
+    role: 'user',
+    source: { kind: 'tool', callId },
+    content: [{
+      type: 'tool-result',
+      toolCallId: callId,
+      isError: false,
+      content: [{ type: 'text', text: 'file-a\nfile-b' }],
+    }],
+  }])
+  assert.deepEqual(toResponsesInput(resolved).input, [
+    { type: 'function_call_output', call_id: 'call-1', output: 'file-a\nfile-b' },
+  ])
+  assert.deepEqual(toAnthropicMessages(resolved), [{
+    role: 'user',
+    content: [{ type: 'tool_result', tool_use_id: 'call-1', content: 'file-a\nfile-b' }],
+  }])
+  assert.deepEqual(toChatMessages(resolved), [
+    { role: 'tool', tool_call_id: 'call-1', content: 'file-a\nfile-b' },
+  ])
+})
+
 test('tool-result images: resolve attachments and retain parallel results before image follow-up', async () => {
-  const ref = { attachmentId: 'tool-image', mediaType: 'image/png', bytes: 2, width: 1, height: 1 }
-  const messages = [
-    message('assistant', ['a', 'b'].map(id => ({ type: 'tool-call', id: ToolCallId(id), name: 'read_image', arguments: '{}' }))),
-    ...['a', 'b'].map(id => message('user', [{
-      type: 'tool-result', toolCallId: ToolCallId(id), isError: false,
-      content: [{ type: 'text', text: id }, { type: 'image', attachment: ref } as never],
-    }])),
+  const ref = imageRef('tool-image', 2)
+  const messages: RequestMessage[] = [
+    requestAssistant(['a', 'b'].map(id => ({ type: 'tool-call', id: ToolCallId(id), name: 'read_image', arguments: '{}' }))),
+    ...['a', 'b'].map(id => requestToolResult(id, [
+      { type: 'text', text: id },
+      { type: 'image', attachment: ref },
+    ])),
   ]
   const before = structuredClone(messages)
   const signal = new AbortController().signal

@@ -3,13 +3,26 @@ import assert from 'node:assert/strict'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { registerHooks } from 'node:module'
-// The host primitives ship CSS modules; Node needs only their empty class map
-// for these pure-logic / server-render tests, not a browser stylesheet loader.
-const css = registerHooks({ load(url, context, nextLoad) {
-  return url.endsWith('.css')
-    ? { format: 'module', source: 'export default {}', shortCircuit: true }
-    : nextLoad(url, context)
-} })
+// These badge tests do not render the host primitives. Its published entry
+// imports browser-only dependencies that are not shipped as runtime deps, so
+// replace that unused import alongside the CSS modules for Node rendering.
+const primitivesStub = `data:text/javascript,${encodeURIComponent(`
+  export const IconDataOutlineRegular = () => null
+  export const useAnchoredPosition = () => ({})
+  export const useDismissOnOutsidePointer = () => {}
+`)}`
+const css = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    return specifier === '@deepseek-ai/dsh-client-ui-primitives'
+      ? { url: primitivesStub, shortCircuit: true }
+      : nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    return url.endsWith('.css')
+      ? { format: 'module', source: 'export default {}', shortCircuit: true }
+      : nextLoad(url, context)
+  },
+})
 const { AccountWindows, compactSegment, createCurrentModelReader, previewWindows,
   collapsedDisplays, expandedDisplays } = await import('../src/client/SubscriptionUsageBadge.js')
 css.deregister()
