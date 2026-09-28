@@ -15,7 +15,7 @@ import {
   QUOTA_EXCEEDED_CODE,
   ReasoningEffortId,
 } from '@deepseek-ai/dsh-llm'
-import { rateLimitDiagnostics, retryAfterInstant, waitFromReset } from './rate-limit.js'
+import { durationMs, rateLimitDiagnostics, retryAfterInstant, waitFromReset } from './rate-limit.js'
 import type { RateLimitResetReader } from './rate-limit.js'
 
 /** One configured model catalog entry. */
@@ -146,7 +146,7 @@ export async function httpLlmError(
   // re-hitting the same closed window.
   const rateLimited = response.status === 429
   const reset = rateLimited
-    ? options.rateLimitReset?.(response, body, now) ?? retryAfterInstant(response, now)
+    ? options.rateLimitReset?.(response, body, now) ?? googleQuotaReset(body, now) ?? retryAfterInstant(response, now)
     : retryAfterInstant(response, now)
   if (reset === undefined && rateLimited) {
     options.onWarn?.(`${label}: ${rateLimitDiagnostics(response, body)}`)
@@ -155,6 +155,31 @@ export async function httpLlmError(
     status: response.status,
     ...reset === undefined ? {} : { providerRetryAfterMs: waitFromReset(reset, now) },
   })
+}
+
+/**
+ * Read a Google RPC quota reset from a 429 body.
+ *
+ * Antigravity discloses the window in `quotaResetDelay` and
+ * `quotaResetTimeStamp` and supplies no rate-limit reader. A wait beyond the
+ * route's delay ceiling makes the retry plugin fail the turn immediately
+ * rather than spending its local retry budget on a closed window. The
+ * relative delay wins: it is measured from this response, so a skewed local
+ * clock cannot stretch or erase it the way it would an absolute timestamp.
+ * @param body - the complete response body.
+ * @param now - the current epoch milliseconds.
+ * @returns the reset instant, or undefined when the body does not name one.
+ */
+function googleQuotaReset(body: string, now: number): number | undefined {
+  const delay = /"quotaResetDelay"\s*:\s*"([^"]+)"/.exec(body)
+  if (delay !== null) {
+    const ms = durationMs(delay[1])
+    if (ms !== undefined && ms > 0) return now + ms
+  }
+  const stamp = /"quotaResetTimeStamp"\s*:\s*"([^"]+)"/.exec(body)
+  if (stamp === null) return undefined
+  const instant = Date.parse(stamp[1])
+  return Number.isFinite(instant) && instant > now ? instant : undefined
 }
 
 /**
@@ -261,7 +286,12 @@ export class OAuthEndpointError extends Error {
 }
 
 /**
- * Read an OAuth JSON error body into an {@link OAuthEndpointError}.
+ * Read an OAuth JSON error body into an {@link OAuthEndpointError}. Two body
+ * shapes are understood: RFC 6749 (`{ error: "invalid_grant", error_description }`)
+ * and the OpenAI API envelope the auth.openai.com token endpoint now answers
+ * with (`{ error: { code: "refresh_token_reused", message } }`). The code
+ * must land in `oauthCode` either way — the permanent-failure classifiers
+ * key on it, and an unrecognized shape would keep a dead login forever.
  * @param response - the failed token-endpoint response.
  * @param label - diagnostic prefix naming the provider.
  * @returns the error to throw.
@@ -270,9 +300,16 @@ export async function oauthEndpointError(response: Response, label: string): Pro
   let oauthCode: string | undefined
   let detail = ''
   try {
-    const parsed = await response.json() as { error?: string; error_description?: string }
-    oauthCode = typeof parsed.error === 'string' ? parsed.error : undefined
-    detail = typeof parsed.error_description === 'string' ? parsed.error_description : (oauthCode ?? '')
+    const parsed = await response.json() as { error?: unknown; error_description?: unknown }
+    if (typeof parsed.error === 'string') {
+      oauthCode = parsed.error
+    } else if (typeof parsed.error === 'object' && parsed.error !== null) {
+      const nested = parsed.error as { code?: unknown; message?: unknown }
+      if (typeof nested.code === 'string' && nested.code.length > 0) oauthCode = nested.code
+      if (typeof nested.message === 'string') detail = nested.message
+    }
+    if (typeof parsed.error_description === 'string') detail = parsed.error_description
+    if (detail.length === 0) detail = oauthCode ?? ''
   } catch {
     // Only swallow error-body parsing: the HTTP status still identifies the failure.
   }
@@ -743,8 +780,13 @@ export function isDiscoveryAborted(error: unknown, signal?: AbortSignal): boolea
     && (error.name === 'AbortError' || error.name === 'TimeoutError')
 }
 
-/** Whether discovery failed because the access token was rejected. */
-function isDiscoveryAuthFailure(error: unknown): boolean {
+/**
+ * Whether discovery failed because the access token was rejected. After
+ * {@link discoverOrRetryAuth} this means the token was rejected AGAIN right
+ * after a forced refresh: the login is dead server-side (revoked) even though
+ * the refresh grant still answers, so the store keeps the session.
+ */
+export function isDiscoveryAuthFailure(error: unknown): boolean {
   return (error instanceof OAuthEndpointError && error.status === 401)
     || (error instanceof LlmError && error.code === 'AUTH')
 }

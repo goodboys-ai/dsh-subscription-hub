@@ -8,7 +8,7 @@
 
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, Message, RequestMessage } from '@deepseek-ai/dsh-llm'
-import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 
 /** An image block with its bytes resolved to inline base64 for the wire. */
 export interface ResolvedImagePart {
@@ -46,6 +46,12 @@ export function withToolResultImages(messages: readonly TranslatableMessage[]): 
   for (const message of messages) {
     if (message.role === 'assistant') flush()
     out.push(message)
+    if (message.role === 'tool') {
+      const parts = message.content.filter((part): part is ResolvedImagePart => part.type === 'image' && 'dataBase64' in part)
+      if (parts.length > 0) {
+        images.push({ type: 'text', text: `Images from tool result ${String(message.toolCallId)}:` }, ...parts)
+      }
+    }
     for (const block of message.content) {
       if (block.type !== 'tool-result') continue
       const parts = block.content.filter((part): part is ResolvedImagePart => part.type === 'image' && 'dataBase64' in part)
@@ -60,10 +66,41 @@ export function withToolResultImages(messages: readonly TranslatableMessage[]): 
 
 /** Translator input message: role plus resolved blocks. */
 export interface TranslatableMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'developer' | 'user' | 'assistant' | 'tool'
   content: readonly TranslatableBlock[]
+  /** First-class tool result correlation in current harness messages. */
+  toolCallId?: string
+  /** Chat Completions correlation in imported histories. */
+  tool_call_id?: string
+  isError?: boolean
   /** Preserved for adapters whose provider-private replay metadata is required. */
   source?: Message['source']
+}
+
+/** A route's cap on outgoing image size; stored attachments are never changed. */
+export interface ImageRequestLimit {
+  /** Longest edge in pixels an image may be sent at. */
+  maxEdge: number
+  /** Encoded-byte target before base64 expansion. */
+  maxBytes: number
+}
+
+/**
+ * The request projection for one oversized image, or undefined when it fits.
+ * Hosts before DSH 0.1.7 read a pixel budget (`maxPixels`), later ones the
+ * target edges (`width`/`height`); each validates only its own fields, so
+ * one projection carries both.
+ */
+export function imageRequestTarget(
+  ref: { width: number; height: number },
+  limit: ImageRequestLimit,
+): { width: number; height: number; maxPixels: number; maxBytes: number } | undefined {
+  const longEdge = Math.max(ref.width, ref.height)
+  if (!(longEdge > limit.maxEdge)) return undefined
+  const short = (edge: number): number => Math.max(1, Math.floor(edge * limit.maxEdge / longEdge))
+  const width = ref.width >= ref.height ? limit.maxEdge : short(ref.width)
+  const height = ref.width >= ref.height ? short(ref.height) : limit.maxEdge
+  return { width, height, maxPixels: width * height, maxBytes: limit.maxBytes }
 }
 
 /**
@@ -74,12 +111,15 @@ export interface TranslatableMessage {
  * @param messages - the request's conversation messages.
  * @param attachments - the deployment's attachment service, when mounted.
  * @param signal - cancellation for the storage reads.
+ * @param limit - the route's outgoing image cap; oversized images are sent
+ *   downscaled while the stored attachment and history stay untouched.
  * @returns the same messages with image blocks resolved for the translators.
  */
 export async function resolveImages(
   messages: readonly RequestMessage[],
   attachments: AttachmentStore | undefined,
   signal?: AbortSignal,
+  limit?: ImageRequestLimit,
 ): Promise<readonly TranslatableMessage[]> {
   const hasImage = messages.some(message => message.content.some(block => block.type === 'image'))
   if (hasImage && attachments === undefined) {
@@ -89,15 +129,29 @@ export async function resolveImages(
       'UNSUPPORTED',
     )
   }
+  const readForRequest = async (ref: ImageAttachmentRef) => {
+    if (attachments === undefined) throw new Error('attachments service is unavailable')
+    const target = limit === undefined ? undefined : imageRequestTarget(ref, limit)
+    if (target !== undefined) {
+      try {
+        const version = await attachments.readImageRequest(ref, target, signal)
+        return { data: version.data, mediaType: version.mediaType, ref: version.attachment }
+      } catch (error) {
+        // A host that cannot derive request images keeps sending the stored bytes, as before.
+        if (signal?.aborted) throw error
+      }
+    }
+    const stored = await attachments.readImage(ref, signal)
+    return { data: stored.data, mediaType: stored.ref.mediaType, ref: stored.ref }
+  }
   const resolveBlock = async (block: ContentBlock): Promise<TranslatableBlock[]> => {
     if (block.type !== 'image') return [block]
-    if (attachments === undefined) throw new Error('attachments service is unavailable')
-    const stored = await attachments.readImage(block.attachment, signal)
-    const { attachmentId, mediaType, bytes, width, height, name } = stored.ref
+    const { data, mediaType: sentType, ref } = await readForRequest(block.attachment)
+    const { attachmentId, mediaType, bytes, width, height, name } = ref
     return [{
       type: 'image',
-      mediaType: stored.ref.mediaType,
-      dataBase64: Buffer.from(stored.data).toString('base64'),
+      mediaType: sentType,
+      dataBase64: Buffer.from(data).toString('base64'),
     }, {
       type: 'text',
       text: `Image reference (for image_generate.referenceImages): ${JSON.stringify({
@@ -105,22 +159,10 @@ export async function resolveImages(
       })}`,
     }]
   }
-  return Promise.all(messages.map(async (message): Promise<TranslatableMessage> => {
-    const content = (await Promise.all(message.content.map(resolveBlock))).flat()
-    if (message.role === 'tool') {
-      return {
-        role: 'user',
-        source: message.source,
-        content: [{
-          type: 'tool-result', toolCallId: message.toolCallId,
-          ...message.isError === undefined ? {} : { isError: message.isError }, content,
-        }],
-      }
-    }
-    return {
-      role: message.role === 'developer' ? 'system' : message.role,
-      ...message.source === undefined ? {} : { source: message.source },
-      content,
-    }
-  }))
+  return Promise.all(messages.map(async (message): Promise<TranslatableMessage> => ({
+    role: message.role,
+    ...message.source === undefined ? {} : { source: message.source },
+    ...message.role === 'tool' ? { toolCallId: message.toolCallId, isError: message.isError } : {},
+    content: (await Promise.all(message.content.map(resolveBlock))).flat(),
+  })))
 }
