@@ -13,7 +13,10 @@
     "claude",
     "grok",
     "github-copilot",
-    "google-antigravity"
+    "google-antigravity",
+    "cursor",
+    "opencode-go",
+    "kimi-code"
   ],
   "type": "module",
   "main": "lib/index.js",
@@ -27,10 +30,15 @@
       "types": "./lib/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./cursor-transport": {
+      "types": "./vendor/cursor/index.d.ts",
+      "default": "./vendor/cursor/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "vendor/cursor",
     "cordis.patch.yml"
   ],
   "dsh": {

@@ -16,6 +16,7 @@ import { PROVIDER_IDS, type ProviderId } from './store.js'
 import type { ProviderUsage } from '../providers/common.js'
 import { EXTERNAL_USAGE_SOURCES } from '../providers/external-usage-controller.js'
 import type { ExternalUsageSource, ExternalUsageStatus } from '../providers/external-usage-controller.js'
+import type { CursorAuthStatus } from '../providers/cursor-auth.js'
 import type { ProxyConfigView, ProxyDraft, ProxyInput, ProxyTestResult } from '../http.js'
 
 /**
@@ -33,6 +34,7 @@ export const SUBSCRIPTIONS_AUTH_ENDPOINTS = [
   'providerSettings', 'setProviderSettings',
   'status', 'login', 'manual', 'cancel', 'logout', 'setDefault', 'usage',
   'externalStatus', 'externalUsage',
+  'cursorStatus', 'cursorLogin', 'cursorCancel', 'cursorLogout', 'cursorUsage',
   'image', 'video',
   'speed', 'setSpeed',
   'proxyGet', 'proxySet', 'proxyTest',
@@ -216,6 +218,15 @@ export class BadRequest extends Error {}
 export interface ExternalUsageRpcController {
   status(): Promise<Record<ExternalUsageSource, ExternalUsageStatus>>
   usage(source: ExternalUsageSource, signal: AbortSignal): Promise<ProviderUsage>
+}
+
+/** Cursor account actions; OAuth tokens remain in the host credential service. */
+export interface CursorRpcController {
+  status(): Promise<CursorAuthStatus>
+  login(): Promise<{ authorizeUrl: string }>
+  cancel(): Promise<void>
+  logout(): Promise<void>
+  usage(signal: AbortSignal): Promise<ProviderUsage>
 }
 
 /**
@@ -522,6 +533,7 @@ async function dispatch(
   signal: AbortSignal,
   providerSettings?: ProviderSettingsController,
   externalUsage?: ExternalUsageRpcController,
+  cursor?: CursorRpcController,
 ): Promise<RpcResult<unknown>> {
   switch (endpoint) {
     case 'providerSettings':
@@ -583,6 +595,23 @@ async function dispatch(
       }
       return ok(await externalUsage.usage(source as ExternalUsageSource, signal))
     }
+    case 'cursorStatus':
+      if (!cursor) throw new BadRequest('Cursor account is unavailable')
+      return ok(await cursor.status())
+    case 'cursorLogin':
+      if (!cursor) throw new BadRequest('Cursor account is unavailable')
+      return ok(await cursor.login())
+    case 'cursorCancel':
+      if (!cursor) throw new BadRequest('Cursor account is unavailable')
+      await cursor.cancel()
+      return ok({ ok: true })
+    case 'cursorLogout':
+      if (!cursor) throw new BadRequest('Cursor account is unavailable')
+      await cursor.logout()
+      return ok({ ok: true })
+    case 'cursorUsage':
+      if (!cursor) throw new BadRequest('Cursor account is unavailable')
+      return ok(await cursor.usage(signal))
     case 'image':
       return ok(await controller.readImage(readImageRef(payload), signal))
     case 'video':
@@ -633,6 +662,7 @@ export function registerAuthRpc(
   modelDefaults: ModelDefaultsController | undefined = undefined,
   providerSettings: ProviderSettingsController | undefined = undefined,
   externalUsage: ExternalUsageRpcController | undefined = undefined,
+  cursor: CursorRpcController | undefined = undefined,
 ): void {
   // `connection` is not in this plugin's inject list (headless compositions
   // lack it), so its startup order is unconstrained: defer registration until
@@ -650,7 +680,7 @@ export function registerAuthRpc(
     const connection = ctx.get('connection') as HostConnectionHandle
     const handler: ConnectionRpcHandler = async (endpoint, payload, signal) => {
       try {
-        return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal, providerSettings, externalUsage)
+        return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal, providerSettings, externalUsage, cursor)
       } catch (error) {
         return failure(error)
       }

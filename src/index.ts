@@ -29,6 +29,9 @@ import { readClaudeCodeCredentials, refreshClaudeSynced } from './auth/claude-co
 import { BadRequest, registerAuthRpc } from './auth/rpc.js'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { ExternalUsageController } from './providers/external-usage-controller.js'
+import { CursorAuth } from './providers/cursor-auth.js'
+import { fetchCursorUsage } from './providers/cursor-usage.js'
+import { CursorCompatAdapter } from './providers/cursor-adapter.js'
 import type {
   AuthController,
   ImageBytesResult,
@@ -1101,8 +1104,16 @@ export function apply(ctx: Context, config: Config): void {
     },
   }
   let resolveExternalCredential: ((name: string) => Promise<{ value: string } | undefined>) | undefined
+  let cursorAuth: CursorAuth | undefined
+  let cursorAttachments: AttachmentStore | undefined
+  ctx.inject(['attachments'], attachmentsCtx => { cursorAttachments = attachmentsCtx.attachments })
   ctx.inject(['credentials'], credentialsCtx => {
     resolveExternalCredential = name => credentialsCtx.credentials.resolve(credentialRef(name))
+    cursorAuth = new CursorAuth(credentialsCtx.credentials, proxiedFetch)
+    credentialsCtx.llm.registerAdapter(['cursor-subscription'], new CursorCompatAdapter({
+      auth: cursorAuth,
+      resolveAttachments: () => cursorAttachments,
+    }))
   })
   const externalUsage = new ExternalUsageController(
     async name => resolveExternalCredential?.(name),
@@ -1174,7 +1185,20 @@ export function apply(ctx: Context, config: Config): void {
       poolAdapter?.invalidate()
       for (const [route, handle] of handles) handle.replace([route])
     },
-  }, externalUsage)
+  }, externalUsage, {
+    status: () => cursorAuth === undefined
+      ? Promise.resolve({ authenticated: false, busy: false }) : cursorAuth.status(),
+    login: () => {
+      if (cursorAuth === undefined) throw new Error('DSH credentials are unavailable')
+      return cursorAuth.login()
+    },
+    cancel: async () => { await cursorAuth?.cancel() },
+    logout: async () => { await cursorAuth?.logout() },
+    usage: async signal => {
+      if (cursorAuth === undefined) throw new Error('DSH credentials are unavailable')
+      return fetchCursorUsage(await cursorAuth.accessToken(signal), proxiedFetch, signal)
+    },
+  })
 
   // Proactively keep keychain-bound Claude accounts synced with Claude Code's
   // own store (Keychain/file) every 5 minutes, so a session left idle between

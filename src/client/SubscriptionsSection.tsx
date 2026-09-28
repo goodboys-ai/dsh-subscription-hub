@@ -18,6 +18,7 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import { en } from './locales.js'
 import { ProviderAccountManager } from './ProviderAccountManager.js'
 import { ExternalUsageCards } from './ExternalUsageCards.js'
+import { CursorCard } from './CursorCard.js'
 import type { SubscriptionsKey } from './locales.js'
 
 import { callSubscriptionsAuth, SubscriptionsAuthError } from './subscriptions-rpc.js'
@@ -962,6 +963,8 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
           </div>
         )
       })}
+      <div style={styles.separator} />
+      <CursorCard rpc={rpc} t={t} />
       <div style={styles.separator} />
       <ExternalUsageCards rpc={rpc} t={t} />
       {managedProvider && <ProviderAccountManager provider={managedProvider.id} name={managedProvider.name}
