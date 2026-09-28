@@ -12,7 +12,7 @@ import type { ProviderModelEditorHandle } from './ProviderModelEditor.js'
 
 interface Catalog { settings: ProviderPreferences; accounts: AccountCatalogRow[] }
 interface Props {
-  provider: SubscriptionProvider
+  provider: SubscriptionProvider | 'cursor-subscription'
   name: string
   rpc: ConnectionHandle['rpc']
   t: (key: SubscriptionsKey, params?: Record<string, unknown>) => string
@@ -59,7 +59,8 @@ export function ProviderAccountManager({ provider, name, rpc, t, onClose }: Prop
     let current = true
     setLoading(true)
     setError('')
-    void callSubscriptionsAuth<Catalog>(rpc, 'providerSettings', { provider }).then(data => {
+    void callSubscriptionsAuth<Catalog>(rpc,
+      provider === 'cursor-subscription' ? 'cursorSettings' : 'providerSettings', { provider }).then(data => {
       if (current) setCatalog(data)
     }).catch(error => {
       if (current) setError(t('accountsLoadFailed', { message: error instanceof Error ? error.message : String(error) }))
@@ -86,17 +87,24 @@ export function ProviderAccountManager({ provider, name, rpc, t, onClose }: Prop
     setSaveError('')
     let savedEfforts = 0
     try {
-      for (const { model, effort } of models.efforts) {
-        await callSubscriptionsAuth(rpc, 'setModelDefault', { provider, model, ...(effort ? { effort } : {}) })
-        savedEfforts++
-        if (!alive.current) return
+      if (provider !== 'cursor-subscription') {
+        for (const { model, effort } of models.efforts) {
+          await callSubscriptionsAuth(rpc, 'setModelDefault', { provider, model, ...(effort ? { effort } : {}) })
+          savedEfforts++
+          if (!alive.current) return
+        }
       }
       // Re-read before writing: another client may have saved since this
       // dialog loaded, and a stale snapshot must never be written back.
-      const latest = await callSubscriptionsAuth<Catalog>(rpc, 'providerSettings', { provider })
+      const latest = await callSubscriptionsAuth<Catalog>(rpc,
+        provider === 'cursor-subscription' ? 'cursorSettings' : 'providerSettings', { provider })
       if (!alive.current) return
-      const base = models.settings === undefined ? latest.settings : mergeLatestAccounts(models.settings, latest.settings)
-      await callSubscriptionsAuth(rpc, 'setProviderSettings', { provider, settings: mergeAccountChanges(base, changes) })
+      if (provider === 'cursor-subscription') {
+        await callSubscriptionsAuth(rpc, 'cursorSetSettings', { settings: models.settings ?? latest.settings })
+      } else {
+        const base = models.settings === undefined ? latest.settings : mergeLatestAccounts(models.settings, latest.settings)
+        await callSubscriptionsAuth(rpc, 'setProviderSettings', { provider, settings: mergeAccountChanges(base, changes) })
+      }
       if (alive.current) onClose()
     } catch (error) {
       if (alive.current) {
@@ -118,13 +126,18 @@ export function ProviderAccountManager({ provider, name, rpc, t, onClose }: Prop
         <h2 id={title} style={{ margin: 0, fontSize: 18 }}>{t('accountsTitle', { provider: name })}</h2>
         <button type="button" autoFocus style={button} disabled={saving} onClick={onClose}>{t('imageClose')}</button>
       </header>
-      <p id={description} style={hint}>{t('accountsHint')}</p>
+      <p id={description} style={hint}>{t(provider === 'cursor-subscription' ? 'cursorAccountsHint' : 'accountsHint')}</p>
       {error && <p role="alert" style={{ ...hint, color: 'var(--dsw-alias-state-error-primary)' }}>{error}</p>}
       {loading && <p role="status" style={hint}>{t('accountsLoading')}</p>}
       {!loading && !catalog && <button type="button" style={button} onClick={() => setAttempt(value => value + 1)}>{t('modelDefaultsRetry')}</button>}
       {catalog && <fieldset disabled={saving || loading} style={{ ...stack, border: 0, margin: 0, padding: 0 }}>
-        {catalog.accounts.length === 0 && <p style={hint}>{t('accountsEmpty')}</p>}
-        {catalog.accounts.map(account => {
+        {catalog.accounts.length === 0 && <p style={hint}>{t(provider === 'cursor-subscription' ? 'cursorManageSignIn' : 'accountsEmpty')}</p>}
+        {provider === 'cursor-subscription' && catalog.accounts.length > 0 &&
+          <fieldset style={{ border, borderRadius: 12, padding: 14 }}>
+            <legend style={{ padding: '0 6px', fontWeight: 600, fontSize: 14 }}>{name}</legend>
+            <p style={hint}>{t('cursorConnected')}</p>
+          </fieldset>}
+        {provider !== 'cursor-subscription' && catalog.accounts.map(account => {
           const preferences = changes[account.key] ?? catalog.settings.accounts?.[account.key] ?? {}
           const selected = accountPoolSelection(preferences, account.models)
           const models = accountModelRows(account, preferences)
@@ -176,7 +189,8 @@ export function ProviderAccountManager({ provider, name, rpc, t, onClose }: Prop
           </fieldset>
         })}
       </fieldset>}
-      <ProviderModelEditor ref={editor} provider={provider} rpc={rpc} t={t} disabled={saving} onDirtyChange={setModelsDirty} />
+      {(provider !== 'cursor-subscription' || (catalog?.accounts.length ?? 0) > 0) &&
+        <ProviderModelEditor ref={editor} provider={provider} rpc={rpc} t={t} disabled={saving} onDirtyChange={setModelsDirty} />}
       <footer style={{ ...stack, gap: 8, borderTop: border, padding: '14px 0 0',
         position: 'sticky', bottom: 0, background: 'var(--dsw-alias-bg-layer-1)' }}>
         {saveError && <p role="alert" style={{ ...hint, color: 'var(--dsw-alias-state-error-primary)' }}>{saveError}</p>}

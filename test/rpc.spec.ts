@@ -81,6 +81,17 @@ test('Cursor RPC exposes browser login and status without returning OAuth tokens
   const models = await handler('cursorModels', {}, signal)
   assert.equal(models.ok, false)
   if (!models.ok) assert.match(models.error.message, /not signed in/)
+  const catalog = await handler('cursorSettings', {}, signal)
+  assert.equal(catalog.ok, true)
+  if (catalog.ok) assert.deepEqual((catalog.value as { accounts: unknown[]; models: unknown[] }).accounts, [])
+  assert.deepEqual(await handler('cursorSetSettings', { settings: { visibleModels: ['composer-2.5'] } }, signal),
+    { ok: true, value: { ok: true } })
+  const updated = await handler('cursorSettings', {}, signal)
+  if (updated.ok) assert.deepEqual((updated.value as { settings: unknown }).settings,
+    { visibleModels: ['composer-2.5'] })
+  const invalid = await handler('cursorSetSettings', { settings: { visibleModels: 'all' } }, signal)
+  assert.equal(invalid.ok, false)
+  if (!invalid.ok) assert.equal(invalid.error.code, 'bad-request')
   for (const endpoint of ['proxyGet', 'proxySet', 'proxyTest']) {
     await assert.rejects(handler(endpoint, {}, signal), /no route registered/)
   }

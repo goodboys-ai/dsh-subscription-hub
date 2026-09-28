@@ -16,13 +16,13 @@ interface ModelRow {
   maxContextWindow?: number
 }
 interface Catalog {
-  provider: SubscriptionProvider
+  provider: SubscriptionProvider | 'cursor-subscription'
   settings: ProviderPreferences
   models: ModelRow[]
   tools: SubscriptionTool[]
 }
 interface Props {
-  provider: SubscriptionProvider
+  provider: SubscriptionProvider | 'cursor-subscription'
   rpc: ConnectionHandle['rpc']
   t: (key: SubscriptionsKey, params?: Record<string, unknown>) => string
   /** Freeze the editor while the owning dialog submits. */
@@ -87,7 +87,8 @@ export const ProviderModelEditor = forwardRef<ProviderModelEditorHandle, Props>(
     setBusy(true)
     setError('')
     try {
-      const data = await callSubscriptionsAuth<Catalog>(rpc, 'providerSettings', { provider, force })
+      const data = await callSubscriptionsAuth<Catalog>(rpc,
+        provider === 'cursor-subscription' ? 'cursorSettings' : 'providerSettings', { provider, force })
       if (generation.current === request) reset(data)
     } catch (error) {
       if (generation.current === request) setError(String(error instanceof Error ? error.message : error))
@@ -131,7 +132,7 @@ export const ProviderModelEditor = forwardRef<ProviderModelEditorHandle, Props>(
   return <div style={{ borderTop: border, marginTop: 12, paddingTop: 12 }}>
     <h3 style={{ margin: 0, fontSize: 15 }}>{t('modelsEdit')}</h3>
     <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
-      <p style={{ margin: 0 }}>{t('modelsHint')}</p>
+      <p style={{ margin: 0 }}>{t(provider === 'cursor-subscription' ? 'cursorManageHint' : 'modelsHint')}</p>
       {error && <p role="alert" style={{ margin: 0, color: 'var(--dsw-alias-state-error-primary, #b42318)' }}>{error}</p>}
       <div style={actions}>
         <button type="button" style={control} disabled={busy || disabled || dirty} onClick={() => { void load(true) }}>{t('usageRefresh')}</button>

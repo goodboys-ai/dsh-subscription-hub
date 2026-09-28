@@ -51,6 +51,25 @@ test('Cursor discovery does not cache or advertise a default list before login',
   assert.deepEqual((await adapter.listModelsForRpc({ force: true })).map(model => model.id), ['composer-2.5'])
 })
 
+test('Cursor visibility changes the picker but preserves discovery and existing model resolution', async () => {
+  let visible: string[] | undefined = ['composer-2.5']
+  const adapter = new CursorCompatAdapter({
+    auth: { accessToken: async () => 'fake-token' },
+    fetchModels: async () => [
+      { id: 'composer-2.5', name: 'Composer 2.5' },
+      { id: 'grok-code', name: 'Grok Code' },
+    ],
+    visibleModels: () => visible,
+  })
+  assert.deepEqual((await adapter.listModels('cursor-subscription')).map(model => model.id), ['composer-2.5'])
+  assert.equal((await adapter.listModelsForRpc()).length, 2, 'Manage can restore a hidden model')
+  assert.equal((await adapter.resolveModel('cursor-subscription', 'grok-code')).id, 'grok-code')
+  visible = undefined
+  assert.equal((await adapter.listModels('cursor-subscription')).length, 2, 'automatic mode shows new models')
+  visible = []
+  assert.deepEqual(await adapter.listModels('cursor-subscription'), [])
+})
+
 test('Cursor transport accepts a DSH 0.1.7 request and completes a mocked run', async () => {
   class FakeRun {
     finished = false

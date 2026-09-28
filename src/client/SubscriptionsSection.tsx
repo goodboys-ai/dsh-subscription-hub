@@ -20,6 +20,7 @@ import { ProviderAccountManager } from './ProviderAccountManager.js'
 import { ExternalUsageCards } from './ExternalUsageCards.js'
 import { CursorCard } from './CursorCard.js'
 import { UsageBadgeDisplaySetting } from './UsageBadgeDisplaySetting.js'
+import { USAGE_BADGE_REFRESH_EVENT } from './usage-badge-preferences.js'
 import type { SubscriptionsKey } from './locales.js'
 
 import { callSubscriptionsAuth, SubscriptionsAuthError } from './subscriptions-rpc.js'
@@ -399,6 +400,7 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
   const pollersRef = useRef(new Map<SubscriptionProvider, ReturnType<typeof setInterval>>())
   /** Accounts with a `usage` call in flight; guards the auto-fetch effect against re-entry. */
   const usageInflightRef = useRef(new Set<string>())
+  const usageRosterSignatureRef = useRef<string>()
   const [managedProvider, setManagedProvider] = useState<{ id: SubscriptionProvider; name: string }>()
   const setProviderError = useCallback((provider: SubscriptionProvider, message: string | undefined): void => {
     if (!mountedRef.current) return
@@ -434,6 +436,12 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
     }
     if (!mountedRef.current) return
     setStatuses(response.providers)
+    const signature = PROVIDERS.map(({ id }) => `${id}:${response.providers[id].accounts
+      .map(account => `${account.key}:${account.isDefault}`).join(',')}`).join(';')
+    if (signature !== usageRosterSignatureRef.current) {
+      usageRosterSignatureRef.current = signature
+      window.dispatchEvent(new Event(USAGE_BADGE_REFRESH_EVENT))
+    }
     // The poll recovered: drop any error line a previous failed poll left.
     for (const { id } of PROVIDERS) setProviderError(id, undefined)
     for (const { id } of PROVIDERS) {
@@ -485,6 +493,7 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
       const usage = await callSubscriptionsAuth<ProviderUsage>(rpc, 'usage', { provider, account, ...force ? { force: true } : {} })
       if (!mountedRef.current) return
       setUsages(prev => ({ ...prev, [key]: usage }))
+      window.dispatchEvent(new Event(USAGE_BADGE_REFRESH_EVENT))
       setUsageErrors((prev) => {
         const next = { ...prev }
         delete next[key]

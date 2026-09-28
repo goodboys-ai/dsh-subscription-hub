@@ -21,6 +21,21 @@ export function projectCursorMessages(messages: GenerateOptions['messages']): un
 }
 
 export class CursorCompatAdapter extends CursorAdapter {
+  private readonly visibleModels: (() => readonly string[] | undefined) | undefined
+
+  constructor(options: ConstructorParameters<typeof CursorAdapter>[0] & {
+    visibleModels?: () => readonly string[] | undefined
+  }) {
+    super(options)
+    this.visibleModels = options.visibleModels
+  }
+
+  override async listModels(provider: string) {
+    const models = await super.listModels(provider)
+    const visible = this.visibleModels?.()
+    return visible === undefined ? models : models.filter(model => visible.includes(model.id))
+  }
+
   override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     return super.stream({
       ...options,

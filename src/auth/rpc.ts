@@ -34,6 +34,7 @@ export const SUBSCRIPTIONS_AUTH_ENDPOINTS = [
   'status', 'login', 'manual', 'cancel', 'logout', 'setDefault', 'usage',
   'externalStatus', 'externalUsage',
   'cursorStatus', 'cursorLogin', 'cursorCancel', 'cursorLogout', 'cursorUsage', 'cursorModels',
+  'cursorSettings', 'cursorSetSettings',
   'image', 'video',
   'speed', 'setSpeed',
   'modelDefaults', 'setModelDefault',
@@ -216,6 +217,8 @@ export interface CursorRpcController {
   logout(): Promise<void>
   usage(signal: AbortSignal): Promise<ProviderUsage>
   models(force: boolean, signal: AbortSignal): Promise<{ id: string; name: string }[]>
+  settings(force: boolean, signal: AbortSignal): Promise<unknown>
+  setSettings(input: unknown): Promise<void>
 }
 
 /**
@@ -525,6 +528,14 @@ async function dispatch(
     case 'cursorModels':
       if (!cursor) throw new BadRequest('Cursor account is unavailable')
       return ok(await cursor.models(readForce(payload), signal))
+    case 'cursorSettings':
+      if (!cursor) throw new BadRequest('Cursor account is unavailable')
+      return ok(await cursor.settings(readForce(payload), signal))
+    case 'cursorSetSettings':
+      if (!cursor) throw new BadRequest('Cursor account is unavailable')
+      if (payload === null || typeof payload !== 'object') throw new BadRequest('payload must be an object')
+      await cursor.setSettings((payload as Record<string, unknown>).settings)
+      return ok({ ok: true })
     case 'image':
       return ok(await controller.readImage(readImageRef(payload), signal))
     case 'video':

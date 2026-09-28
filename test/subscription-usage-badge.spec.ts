@@ -24,7 +24,8 @@ const css = registerHooks({
   },
 })
 const { AccountWindows, compactSegment, createCurrentModelReader, previewWindows,
-  collapsedDisplays, expandedDisplays, retainSubscriptionSelection, usageBadgeIcon } = await import('../src/client/SubscriptionUsageBadge.js')
+  collapsedDisplays, expandedDisplays, retainSubscriptionSelection, usageBadgeIcon,
+  loadBadgeRoster, usageOf } = await import('../src/client/SubscriptionUsageBadge.js')
 css.deregister()
 import type { ProviderUsageDisplay } from '../src/client/SubscriptionUsageBadge.js'
 import type { UsageWindow } from '../src/client/SubscriptionsSection.js'
@@ -102,6 +103,37 @@ test('non-subscription selections retain only the last subscription and its mode
   assert.equal(retainSubscriptionSelection(anti, undefined), anti)
   assert.deepEqual(collapsedDisplays([display('codex'), display()], retainSubscriptionSelection(anti, api)?.provider).map(d => d.provider), ['antigravity'])
   assert.deepEqual(collapsedDisplays([display('codex')], anti.provider), [])
+})
+
+test('Cursor and built-in key providers participate in the session quota selection', () => {
+  for (const provider of ['cursor-subscription', 'opencode-go', 'kimi-coding'] as const) {
+    const selected = { provider, model: 'sample' }
+    assert.deepEqual(retainSubscriptionSelection(undefined, selected), selected)
+    assert.equal(collapsedDisplays([display('codex'), display(provider)], provider)[0]?.provider, provider)
+  }
+})
+
+test('quota roster and usage calls include Cursor, OpenCode Go and Kimi while tolerating OAuth status failure', async () => {
+  const calls: { endpoint: string; payload: unknown }[] = []
+  const rpc = { call: async (_channel: string, endpoint: string, payload: unknown) => {
+    calls.push({ endpoint, payload })
+    if (endpoint.endsWith('.status')) throw new Error('OAuth status unavailable')
+    if (endpoint.endsWith('.cursorStatus')) return { ok: true, value: { authenticated: true } }
+    if (endpoint.endsWith('.externalStatus')) return { ok: true, value: {
+      'opencode-go': { configured: true }, 'kimi-code': { configured: true },
+    } }
+    return { ok: true, value: { supported: true, windows: [{ kind: 'other', usedPercent: 20 }] } }
+  } } as never
+  const { roster, refreshed } = await loadBadgeRoster(rpc)
+  assert.deepEqual(roster.map(entry => entry.provider), ['cursor-subscription', 'opencode-go', 'kimi-coding'])
+  assert.equal(refreshed.has('codex'), false)
+  assert.equal(refreshed.has('cursor-subscription'), true)
+  await Promise.all(roster.map(entry => usageOf(rpc, entry)))
+  assert.deepEqual(calls.slice(3), [
+    { endpoint: 'subscriptions-auth.cursorUsage', payload: {} },
+    { endpoint: 'subscriptions-auth.externalUsage', payload: { source: 'opencode-go' } },
+    { endpoint: 'subscriptions-auth.externalUsage', payload: { source: 'kimi-code' } },
+  ])
 })
 
 test('data icon supports both DSH export names without requiring either named import', () => {

@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react'
 export type UsageBadgeMode = 'recent' | 'hidden'
 const MODE_KEY = 'dsh.subscriptions.usageBadgeMode'
 const MODE_EVENT = 'dsh:subscriptions:usage-badge-mode'
+export const USAGE_BADGE_REFRESH_EVENT = 'dsh:subscriptions:usage-refresh'
 
 /** Read the browser preference; blocked storage retains the default display. */
 export function readUsageBadgeMode(): UsageBadgeMode {

@@ -32,6 +32,7 @@ import { ExternalUsageController } from './providers/external-usage-controller.j
 import { CursorAuth } from './providers/cursor-auth.js'
 import { fetchCursorUsage } from './providers/cursor-usage.js'
 import { CursorCompatAdapter } from './providers/cursor-adapter.js'
+import { CursorModelSettingsStore, validateCursorModelSettings } from './providers/cursor-model-settings.js'
 import type {
   AuthController,
   ImageBytesResult,
@@ -650,6 +651,7 @@ export function apply(ctx: Context, config: Config): void {
   const previousAttemptTimeout = ensureConnectAttemptTimeout()
   ctx.effect(() => () => { restoreConnectAttemptTimeout(previousAttemptTimeout) }, 'dsh-subscription-hub: connect attempt timeout')
   const preferences = new ProviderSettingsStore()
+  const cursorModelSettings = new CursorModelSettingsStore()
   const codexVersion = new CodexClientVersionCache()
   const claudeVersion = new ClaudeCliVersionCache()
   const providers = [...new Set(config.providers ?? [...PROVIDER_IDS])]
@@ -1143,6 +1145,7 @@ export function apply(ctx: Context, config: Config): void {
     cursorAdapter = new CursorCompatAdapter({
       auth: cursorAuth,
       resolveAttachments: () => cursorAttachments,
+      visibleModels: () => cursorModelSettings.visibleModels(),
     })
     cursorHandle = credentialsCtx.llm.registerAdapter(['cursor-subscription'], cursorAdapter)
   })
@@ -1245,6 +1248,26 @@ export function apply(ctx: Context, config: Config): void {
       const models = await cursorAdapter.listModelsForRpc({ force, signal })
       if (force) cursorHandle?.replace(['cursor-subscription'])
       return models
+    },
+    settings: async (force, signal) => {
+      const status = cursorAuth === undefined ? { authenticated: false } : await cursorAuth.status()
+      const models = status.authenticated && cursorAdapter !== undefined
+        ? await cursorAdapter.listModelsForRpc({ force, signal }) : []
+      if (force && status.authenticated) cursorHandle?.replace(['cursor-subscription'])
+      return {
+        provider: 'cursor-subscription', settings: cursorModelSettings.get(),
+        models: models.map(({ id, name }) => ({ id, name, efforts: [] })),
+        tools: [],
+        accounts: status.authenticated ? [{ key: 'cursor', label: 'Cursor', models }] : [],
+      }
+    },
+    setSettings: async input => {
+      let validated
+      try { validated = validateCursorModelSettings(input) } catch (error) {
+        throw new BadRequest(error instanceof Error ? error.message : String(error))
+      }
+      await cursorModelSettings.set(validated)
+      cursorHandle?.replace(['cursor-subscription'])
     },
   })
 

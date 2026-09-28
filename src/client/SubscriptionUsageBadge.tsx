@@ -8,11 +8,11 @@
  * the current provider first and the default account (starred) first within
  * a provider. Model-scoped Antigravity usage follows the current model.
  *
- * Usage rides the `subscriptions-auth` `status` + `usage` endpoints on a slow
+ * Usage rides the `subscriptions-auth` usage endpoints on a slow
  * poll (the server shares its cache across UI surfaces); the current model
  * comes from ui-model-selection's `modelDirectories` service on a quicker
  * poll, since the host pushes nothing on a model switch. Renders nothing when
- * no provider has a logged-in account that reports usage.
+ * no connected provider reports usage.
  *
  * The collapsed pill reads only the default account — the same account
  * direct (non-pool) routes serve — so it stays one short segment even for a
@@ -34,7 +34,7 @@ import type { ModelDirectoriesLike } from './SpeedSelect.js'
 import { en } from './locales.js'
 import type { SubscriptionsKey } from './locales.js'
 import { hostIcon } from './host-icons.js'
-import { useUsageBadgeMode } from './usage-badge-preferences.js'
+import { USAGE_BADGE_REFRESH_EVENT, useUsageBadgeMode } from './usage-badge-preferences.js'
 
 /** DSH renamed the data icon in 0.1.7; retain older supported hosts too. */
 export function usageBadgeIcon(icons: {
@@ -84,7 +84,7 @@ export interface AccountUsageDisplay {
 
 /** One provider's usage snapshot: every logged-in account that reports windows. */
 export interface ProviderUsageDisplay {
-  provider: SubscriptionProvider
+  provider: BadgeProvider
   name: string
   /** Default account first, then the rest in the `status` endpoint's order. */
   accounts: AccountUsageDisplay[]
@@ -96,12 +96,64 @@ export function pillAccountOf(d: ProviderUsageDisplay): AccountUsageDisplay {
 }
 
 /** Brand display names (short form for the compact badge). */
-const PROVIDER_NAMES: Record<SubscriptionProvider, string> = {
+export type BadgeProvider = SubscriptionProvider | 'cursor-subscription' | 'opencode-go' | 'kimi-coding'
+
+const PROVIDER_NAMES: Record<BadgeProvider, string> = {
   codex: 'Codex',
   claude: 'Claude',
   grok: 'Grok',
   copilot: 'Copilot',
   antigravity: 'Antigravity',
+  'cursor-subscription': 'Cursor',
+  'opencode-go': 'OpenCode Go',
+  'kimi-coding': 'Kimi Code',
+}
+
+interface UsageRosterEntry { provider: BadgeProvider; account: AccountStatus }
+
+/** Read each account source independently so a failing endpoint cannot hide the others. */
+export async function loadBadgeRoster(rpc: ConnectionHandle['rpc']): Promise<{
+  roster: UsageRosterEntry[]
+  refreshed: Set<BadgeProvider>
+}> {
+  const [subscriptions, cursor, external] = await Promise.allSettled([
+    callSubscriptionsAuth<{ providers: Record<SubscriptionProvider, ProviderStatus> }>(rpc, 'status', {}),
+    callSubscriptionsAuth<{ authenticated: boolean }>(rpc, 'cursorStatus', {}),
+    callSubscriptionsAuth<Record<'opencode-go' | 'kimi-code', { configured: boolean }>>(rpc, 'externalStatus', {}),
+  ])
+  const roster: UsageRosterEntry[] = []
+  const refreshed = new Set<BadgeProvider>()
+  if (subscriptions.status === 'fulfilled') {
+    for (const provider of ['codex', 'claude', 'grok', 'copilot', 'antigravity'] as const) {
+      refreshed.add(provider)
+      for (const account of accountsOf(subscriptions.value.providers[provider])) roster.push({ provider, account })
+    }
+  }
+  if (cursor.status === 'fulfilled') {
+    refreshed.add('cursor-subscription')
+    if (cursor.value.authenticated) roster.push({
+      provider: 'cursor-subscription', account: { key: 'cursor', isDefault: true },
+    })
+  }
+  if (external.status === 'fulfilled') {
+    for (const [source, provider] of [
+      ['opencode-go', 'opencode-go'], ['kimi-code', 'kimi-coding'],
+    ] as const) {
+      refreshed.add(provider)
+      if (external.value[source]?.configured) roster.push({
+        provider, account: { key: source, isDefault: true },
+      })
+    }
+  }
+  return { roster, refreshed }
+}
+
+export async function usageOf(rpc: ConnectionHandle['rpc'], { provider, account }: UsageRosterEntry): Promise<ProviderUsage> {
+  if (provider === 'cursor-subscription') return callSubscriptionsAuth(rpc, 'cursorUsage', {})
+  if (provider === 'opencode-go' || provider === 'kimi-coding') {
+    return callSubscriptionsAuth(rpc, 'externalUsage', { source: provider === 'kimi-coding' ? 'kimi-code' : provider })
+  }
+  return callSubscriptionsAuth(rpc, 'usage', { provider, account: account.key })
 }
 
 /**
@@ -161,7 +213,7 @@ export function prioritizeWindows(windows: readonly UsageWindow[], model?: strin
 
 /** Small previews keep a live model catalog from taking over the dialog. */
 export const WINDOW_PREVIEW_LIMIT = 4
-export function previewWindows(windows: readonly UsageWindow[], model?: string, provider?: SubscriptionProvider) {
+export function previewWindows(windows: readonly UsageWindow[], model?: string, provider?: BadgeProvider) {
   const ordered = prioritizeWindows(windows, model)
   // Antigravity has many model-specific quotas: preview only the current model.
   const limit = provider === 'antigravity'
@@ -282,36 +334,25 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
     if (rpc === undefined || inflightRef.current) return
     inflightRef.current = true
     try {
-      const statusResp = await callSubscriptionsAuth<{
-        providers: Record<SubscriptionProvider, ProviderStatus>
-      }>(rpc, 'status', {})
+      const { roster, refreshed } = await loadBadgeRoster(rpc)
       if (!mountedRef.current) return
 
       // Every logged-in account of every provider, in a stable order (the
       // `status` provider order, default account first) so rows don't jump
       // around as polls settle at different times.
-      const roster: { provider: SubscriptionProvider; account: AccountStatus }[] = []
-      for (const provider of Object.keys(statusResp.providers) as SubscriptionProvider[]) {
-        for (const account of accountsOf(statusResp.providers[provider])) roster.push({ provider, account })
-      }
-      const keyOf = (provider: SubscriptionProvider, account: AccountStatus): string => `${provider}:${account.key}`
+      const keyOf = (provider: BadgeProvider, account: AccountStatus): string => `${provider}:${account.key}`
 
       const lastKnown = lastKnownRef.current
       // Drop last-known state for anything no longer logged in — that is a
       // real signal, unlike a fetch failure.
       const live = new Set(roster.map(({ provider, account }) => keyOf(provider, account)))
       for (const key of lastKnown.keys()) {
-        if (!live.has(key)) lastKnown.delete(key)
-      }
-
-      if (roster.length === 0) {
-        setDisplays([])
-        return
+        if (refreshed.has(key.split(':', 1)[0] as BadgeProvider) && !live.has(key)) lastKnown.delete(key)
       }
 
       const results = await Promise.allSettled(
         roster.map(async ({ provider, account }) => {
-          const usage = await callSubscriptionsAuth<ProviderUsage>(rpc, 'usage', { provider, account: account.key })
+          const usage = await usageOf(rpc, { provider, account })
           return { provider, account, usage }
         }),
       )
@@ -330,7 +371,7 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
         lastKnown.set(key, usage.windows)
       }
 
-      const byProvider = new Map<SubscriptionProvider, ProviderUsageDisplay>()
+      const byProvider = new Map<BadgeProvider, ProviderUsageDisplay>()
       for (const { provider, account } of roster) {
         const key = keyOf(provider, account)
         const windows = lastKnown.get(key)
@@ -347,7 +388,10 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
         if (display === undefined) byProvider.set(provider, { provider, name: PROVIDER_NAMES[provider], accounts: [row] })
         else display.accounts.push(row)
       }
-      setDisplays([...byProvider.values()])
+      setDisplays(previous => [
+        ...byProvider.values(),
+        ...previous.filter(display => !refreshed.has(display.provider)),
+      ])
     } catch {
       // A failed poll must not crash the badge; keep last known state.
     } finally {
@@ -365,7 +409,11 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
     if (displayMode === 'hidden') return
     void refresh()
     const timer = setInterval(() => { void refresh() }, USAGE_POLL_INTERVAL_MS)
-    return () => { clearInterval(timer) }
+    window.addEventListener(USAGE_BADGE_REFRESH_EVENT, refresh)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener(USAGE_BADGE_REFRESH_EVENT, refresh)
+    }
   }, [refresh, displayMode])
 
   useEffect(() => {
@@ -547,7 +595,7 @@ function AccountMeta({ account, translate }: { account: AccountUsageDisplay; tra
 
 /** Preview each account independently; all remaining quotas stay accessible. */
 export function AccountWindows({ windows, model, provider, translate }: {
-  windows: readonly UsageWindow[]; model: string | undefined; provider?: SubscriptionProvider; translate: Translate
+  windows: readonly UsageWindow[]; model: string | undefined; provider?: BadgeProvider; translate: Translate
 }) {
   const { shown, hidden } = previewWindows(windows, model, provider)
   const rows = (items: readonly UsageWindow[]) => (
