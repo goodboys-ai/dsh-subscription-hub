@@ -14,6 +14,8 @@ import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { PROVIDER_IDS, type ProviderId } from './store.js'
 import type { ProviderUsage } from '../providers/common.js'
+import { EXTERNAL_USAGE_SOURCES } from '../providers/external-usage-controller.js'
+import type { ExternalUsageSource, ExternalUsageStatus } from '../providers/external-usage-controller.js'
 import type { ProxyConfigView, ProxyDraft, ProxyInput, ProxyTestResult } from '../http.js'
 
 /**
@@ -30,6 +32,7 @@ export const SUBSCRIPTIONS_AUTH_PREFIX = 'subscriptions-auth.'
 export const SUBSCRIPTIONS_AUTH_ENDPOINTS = [
   'providerSettings', 'setProviderSettings',
   'status', 'login', 'manual', 'cancel', 'logout', 'setDefault', 'usage',
+  'externalStatus', 'externalUsage',
   'image', 'video',
   'speed', 'setSpeed',
   'proxyGet', 'proxySet', 'proxyTest',
@@ -208,6 +211,12 @@ export interface AuthController {
 
 /** Payload carried no usable provider id — an RPC client bug, not a server failure. */
 export class BadRequest extends Error {}
+
+/** Credential-backed quota readers for model providers already in DSH. */
+export interface ExternalUsageRpcController {
+  status(): Promise<Record<ExternalUsageSource, ExternalUsageStatus>>
+  usage(source: ExternalUsageSource, signal: AbortSignal): Promise<ProviderUsage>
+}
 
 /**
  * Structural face of `connection.fetch.register` shared by both dsh lines.
@@ -512,6 +521,7 @@ async function dispatch(
   payload: unknown,
   signal: AbortSignal,
   providerSettings?: ProviderSettingsController,
+  externalUsage?: ExternalUsageRpcController,
 ): Promise<RpcResult<unknown>> {
   switch (endpoint) {
     case 'providerSettings':
@@ -562,6 +572,17 @@ async function dispatch(
       const provider = readProvider(payload)
       return ok(await controller.usage(provider, readString(payload, 'account'), signal, readForce(payload)))
     }
+    case 'externalStatus':
+      if (!externalUsage) throw new BadRequest('external usage is unavailable')
+      return ok(await externalUsage.status())
+    case 'externalUsage': {
+      if (!externalUsage) throw new BadRequest('external usage is unavailable')
+      const source = readString(payload, 'source')
+      if (!(EXTERNAL_USAGE_SOURCES as readonly string[]).includes(source)) {
+        throw new BadRequest(`payload.source must be one of ${EXTERNAL_USAGE_SOURCES.join(', ')}`)
+      }
+      return ok(await externalUsage.usage(source as ExternalUsageSource, signal))
+    }
     case 'image':
       return ok(await controller.readImage(readImageRef(payload), signal))
     case 'video':
@@ -611,6 +632,7 @@ export function registerAuthRpc(
   proxy: ProxyConfigController | undefined = undefined,
   modelDefaults: ModelDefaultsController | undefined = undefined,
   providerSettings: ProviderSettingsController | undefined = undefined,
+  externalUsage: ExternalUsageRpcController | undefined = undefined,
 ): void {
   // `connection` is not in this plugin's inject list (headless compositions
   // lack it), so its startup order is unconstrained: defer registration until
@@ -628,7 +650,7 @@ export function registerAuthRpc(
     const connection = ctx.get('connection') as HostConnectionHandle
     const handler: ConnectionRpcHandler = async (endpoint, payload, signal) => {
       try {
-        return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal, providerSettings)
+        return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal, providerSettings, externalUsage)
       } catch (error) {
         return failure(error)
       }

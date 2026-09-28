@@ -27,6 +27,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { readClaudeCodeCredentials, refreshClaudeSynced } from './auth/claude-code-creds.js'
 import { BadRequest, registerAuthRpc } from './auth/rpc.js'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { ExternalUsageController } from './providers/external-usage-controller.js'
 import type {
   AuthController,
   ImageBytesResult,
@@ -1098,6 +1100,14 @@ export function apply(ctx: Context, config: Config): void {
       handles.get(provider)?.replace([provider])
     },
   }
+  let resolveExternalCredential: ((name: string) => Promise<{ value: string } | undefined>) | undefined
+  ctx.inject(['credentials'], credentialsCtx => {
+    resolveExternalCredential = name => credentialsCtx.credentials.resolve(credentialRef(name))
+  })
+  const externalUsage = new ExternalUsageController(
+    async name => resolveExternalCredential?.(name),
+    proxiedFetch,
+  )
   registerAuthRpc(ctx, new SubscriptionsAuthController(
     flows, deviceFlows, authChanged, resolveAttachments, usageFetchers, undefined, poolUsage, config.antigravity,
   ), speed, {
@@ -1164,7 +1174,7 @@ export function apply(ctx: Context, config: Config): void {
       poolAdapter?.invalidate()
       for (const [route, handle] of handles) handle.replace([route])
     },
-  })
+  }, externalUsage)
 
   // Proactively keep keychain-bound Claude accounts synced with Claude Code's
   // own store (Keychain/file) every 5 minutes, so a session left idle between

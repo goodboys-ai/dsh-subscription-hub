@@ -26,17 +26,37 @@ interface FakeStore {
 }
 
 /** Mount the plugin with fake llm/connection (and optional attachments); return the RPC handler. */
-async function mount(attachments?: FakeStore): Promise<FakeConnectionHandler> {
+async function mount(attachments?: FakeStore, credentials?: { resolve(ref: string): Promise<{ value: string } | undefined> }): Promise<FakeConnectionHandler> {
   const ctx = new Context()
   ctx.provide('llm', { registerAdapter: () => Object.assign(() => {}, { replace: () => {} }) })
   const fake = createFakeConnection()
   ctx.provide('connection', fake.connection)
   if (attachments !== undefined) ctx.provide('attachments', attachments)
+  if (credentials !== undefined) ctx.provide('credentials', credentials as never)
   ctx.plugin(plugin, { providers: ['codex'] })
   await new Promise(resolve => setTimeout(resolve, 50))
   assert.ok(fake.registered(), 'the subscriptions-auth routes were registered')
   return fake.handler
 }
+
+test('usage-only RPC reports key presence and rejects unknown sources without exposing secrets', async () => {
+  const handler = await mount(undefined, {
+    resolve: async ref => ref === 'OPENCODE_GO_API_KEY' ? { value: 'go-secret' } : undefined,
+  })
+  const signal = new AbortController().signal
+  const status = await handler('externalStatus', {}, signal)
+  assert.deepEqual(status, { ok: true, value: {
+    'opencode-go': { configured: true },
+    'kimi-code': { configured: false },
+  } })
+  assert.ok(!JSON.stringify(status).includes('go-secret'))
+  const unknown = await handler('externalUsage', { source: 'not-a-source' }, signal)
+  assert.equal(unknown.ok, false)
+  if (!unknown.ok) assert.equal(unknown.error.code, 'bad-request')
+  const missing = await handler('externalUsage', { source: 'kimi-code' }, signal)
+  assert.equal(missing.ok, false)
+  if (!missing.ok) assert.match(missing.error.message, /not configured/)
+})
 
 const REF = { attachmentId: 'att-1', mediaType: 'image/png', bytes: 2, width: 1, height: 1 }
 

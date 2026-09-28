@@ -8,7 +8,9 @@ This project starts from [V1ki/dsh-plugin-subscriptions](https://github.com/V1ki
 
 The existing Codex, Claude, Grok, Copilot, and Antigravity providers have been ported to DSH `0.1.7-rc.2`. The source build and all 506 tests pass. An isolated DSH `0.1.7-rc.2` web profile boots with the plugin, serves the client bundle, and responds to the subscriptions auth-status RPC. Live provider sign-in and model requests have not yet been exercised.
 
-Later milestones will add Cursor using [orrinzeng/dsh-cursor-subscription](https://github.com/orrinzeng/dsh-cursor-subscription), followed by usage-only readers for OpenCode Go and Kimi Code. Those additions are not part of the current build.
+The Settings page now includes usage-only cards for OpenCode Go and Kimi Code. They resolve `OPENCODE_GO_API_KEY` and `KIMI_CODE_API_KEY` through DSH's credential service on each request. The keys remain on the host; the browser receives only configured status and normalized quota windows. The readers are covered by mocked HTTP tests and an isolated DSH web-profile RPC smoke check. Live account responses have not yet been verified.
+
+Cursor support is next, using [orrinzeng/dsh-cursor-subscription](https://github.com/orrinzeng/dsh-cursor-subscription) as the reference. Its individual-account usage reader calls Cursor dashboard endpoints with a session cookie derived from a Cursor OAuth token; Cursor's documented Admin API is for team usage. Cursor is not yet included in this build.
 
 ## Development
 
