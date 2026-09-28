@@ -1,6 +1,6 @@
 # Bundle self-activation patch: when this package is installed into a profile
-# via `dsh plugin --profile web add dsh-subscription-hub` (or a local
-# checkout / git URL), this patch mounts the plugin's node half. The client
+# via `dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub`
+# (or a local checkout), this patch mounts the plugin's node half. The client
 # half (Settings > Subscriptions page) is discovered automatically from the
 # `dsh.client` declaration in package.json.
 #

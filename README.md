@@ -4,6 +4,25 @@ A single DeepSeek Harness plugin for subscription-backed models and usage querie
 
 This project started from [V1ki/dsh-plugin-subscriptions](https://github.com/V1ki/dsh-plugin-subscriptions) at `090d964` under its MIT license and now includes upstream `0.9.5` (`75a8346`). The upstream English and Chinese READMEs are kept in [`docs/upstream-README.md`](docs/upstream-README.md) and [`docs/upstream-README.zh.md`](docs/upstream-README.zh.md).
 
+## Install from GitHub
+
+The tested DSH version is `0.1.7-rc.2`. With `dsh` available, install the plugin into the web profile after this repository has been published:
+
+```sh
+dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub
+```
+
+Git installs run this package's `prepare` script to build the host and browser bundles. If pnpm asks for build-script approval, add this package to the web profile's `pnpm-workspace.yaml` and repeat the command:
+
+```yaml
+allowBuilds:
+  dsh-subscription-hub: true
+```
+
+Restart `dsh web` after installation. Open **Settings → Subscriptions** to connect the OAuth providers or Cursor, manage their accounts and model lists, and inspect their quota. OpenCode Go and Kimi Code use API keys configured in **Settings → Models**; their cards show usage when those keys are present. The session footer quota pill can be shown or hidden from **Settings → Subscriptions**.
+
+To update a GitHub installation, run the same `dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub` command again and restart `dsh web`.
+
 ## Migration status
 
 The existing Codex, Claude, Grok, Copilot, and Antigravity providers have been ported to DSH `0.1.7-rc.2`. This includes upstream fixes for first-class `role: "tool"` messages and renamed client icons ([compatibility issue #117](https://github.com/V1ki/dsh-plugin-subscriptions/issues/117)). The source build and test suite pass. An isolated DSH `0.1.7-rc.2` web profile boots with the plugin, serves the client bundle, and responds to its auth and usage-status RPCs. Live provider sign-in and model requests have not yet been exercised.
@@ -23,9 +42,9 @@ The plugin uses DSH network settings. Its former proxy card, config file, and RP
 ## Development
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm build
 pnpm test
 ```
 
-The package is marked private while the migration is underway. The `cordis.patch.yml` bundle entry and browser module ID use this project's package name, `dsh-subscription-hub`.
+The package is private to prevent npm publication; GitHub source installation is supported. The `cordis.patch.yml` bundle entry and browser module ID use this project's package name, `dsh-subscription-hub`.

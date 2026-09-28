@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Unified subscription providers and usage dashboard for DeepSeek Harness",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goodboys-ai/dsh-subscription-hub.git"
+  },
+  "homepage": "https://github.com/goodboys-ai/dsh-subscription-hub#readme",
+  "bugs": {
+    "url": "https://github.com/goodboys-ai/dsh-subscription-hub/issues"
+  },
+  "packageManager": "pnpm@10.33.2",
   "keywords": [
     "deepseek-harness",
     "dsh-plugin",
