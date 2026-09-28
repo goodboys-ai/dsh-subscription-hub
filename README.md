@@ -2,11 +2,18 @@
 
 A single DeepSeek Harness plugin for subscription-backed models and usage queries.
 
-This project started from [V1ki/dsh-plugin-subscriptions](https://github.com/V1ki/dsh-plugin-subscriptions) at `090d964` under its MIT license and now includes upstream `0.9.5` (`75a8346`). The upstream English and Chinese READMEs are kept in [`docs/upstream-README.md`](docs/upstream-README.md) and [`docs/upstream-README.zh.md`](docs/upstream-README.zh.md).
+## Features
+
+- **Subscription models:** Use ChatGPT/Codex, Claude, Grok, GitHub Copilot, Google Antigravity, and Cursor in DSH's model picker after connecting an account.
+- **Account and model controls:** Sign in, manage accounts, refresh model catalogs, and choose model visibility in **Settings → Subscriptions**. Multi-account providers also support default-account and pool settings.
+- **Quota in Settings and sessions:** View available usage windows, progress bars, and reset times on provider cards or in the optional session-footer quota pill. Copilot has no usage endpoint.
+- **OpenCode Go and Kimi Code usage:** Read quota for these built-in DSH providers through the API keys already configured in **Settings → Models**; the plugin does not replace their model routes.
+- **Provider tools:** Add Codex web search, Grok X search, image generation and editing through ChatGPT or Grok, and Grok video generation when the matching provider is enabled.
+- **DSH network settings:** Use the host's network configuration without a separate plugin proxy.
 
 ## Install from GitHub
 
-The tested DSH version is `0.1.7-rc.2`. With `dsh` available, install the plugin into the web profile after this repository has been published:
+The tested DSH version is `0.1.7-rc.2`. With `dsh` available, install the plugin into the web profile:
 
 ```sh
 dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub
@@ -48,3 +55,7 @@ pnpm test
 ```
 
 The package is private to prevent npm publication; GitHub source installation is supported. The `cordis.patch.yml` bundle entry and browser module ID use this project's package name, `dsh-subscription-hub`.
+
+## Origins
+
+This project started from [V1ki/dsh-plugin-subscriptions](https://github.com/V1ki/dsh-plugin-subscriptions) at `090d964` under its MIT license and now includes upstream `0.9.5` (`75a8346`). The upstream English and Chinese READMEs are kept in [`docs/upstream-README.md`](docs/upstream-README.md) and [`docs/upstream-README.zh.md`](docs/upstream-README.zh.md).
