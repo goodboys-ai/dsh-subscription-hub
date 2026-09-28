@@ -84,7 +84,7 @@ export class CursorAuth {
     }
   }
 
-  async accessToken(signal?: AbortSignal): Promise<string> {
+  async accessToken({ signal }: { signal?: AbortSignal } = {}): Promise<string> {
     signal?.throwIfAborted()
     const current = await this.read()
     if (current === undefined) throw new Error('Cursor is not signed in')

@@ -1224,7 +1224,7 @@ export function apply(ctx: Context, config: Config): void {
     logout: async () => { await cursorAuth?.logout() },
     usage: async signal => {
       if (cursorAuth === undefined) throw new Error('DSH credentials are unavailable')
-      return fetchCursorUsage(await cursorAuth.accessToken(signal), proxiedFetch, signal)
+      return fetchCursorUsage(await cursorAuth.accessToken({ signal }), proxiedFetch, signal)
     },
   })
 

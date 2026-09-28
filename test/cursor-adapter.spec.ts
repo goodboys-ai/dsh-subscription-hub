@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageId, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { CursorCompatAdapter, projectCursorMessages } from '../src/providers/cursor-adapter.js'
+import { CURSOR_CREDENTIAL_REF, CursorAuth } from '../src/providers/cursor-auth.js'
 
 test('Cursor adapter projects DSH 0.1.7 tool messages for the imported transport', () => {
   const callId = ToolCallId('call-1')
@@ -52,14 +53,23 @@ test('Cursor transport accepts a DSH 0.1.7 request and completes a mocked run', 
     abort() { this.close() }
     close() { this.finished = true; this.stream.destroyed = true }
   }
+  const auth = new CursorAuth({
+    async resolve(ref) {
+      assert.equal(ref, CURSOR_CREDENTIAL_REF)
+      return { value: JSON.stringify({ type: 'oauth', access: 'fake-token', refresh: 'refresh-token', expires: Date.now() + 3_600_000 }) }
+    },
+    async set() { throw new Error('unexpected credential write') },
+    async unset() { throw new Error('unexpected credential removal') },
+  })
   const adapter = new CursorCompatAdapter({
-    auth: { accessToken: async () => 'fake-token' },
+    auth,
     createAgentRun: () => new FakeRun(),
   })
   const chunks = []
   for await (const chunk of adapter.stream({
     provider: 'cursor-subscription', model: 'composer-2',
     messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    signal: new AbortController().signal,
   })) chunks.push(chunk)
   assert.deepEqual(chunks.at(-1), { type: 'finish', reason: { kind: 'stop' } })
 })

@@ -3,7 +3,7 @@ import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk }
 
 export class CursorAdapter extends LlmAdapter {
   constructor(options: {
-    auth: { accessToken(): Promise<string> }
+    auth: { accessToken(options?: { signal?: AbortSignal }): Promise<string> }
     resolveAttachments?: () => unknown
     fetchModels?: (access: string) => Promise<{ id: string; name: string }[]>
     createAgentRun?: (access: string) => unknown
