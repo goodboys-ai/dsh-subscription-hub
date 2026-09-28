@@ -16,6 +16,17 @@ test('usage-only status reports configured refs without returning their values',
   await assert.rejects(() => controller.usage('kimi-code'), /not configured/)
 })
 
+test('Kimi Code resolves the credential name used by the DSH base install', async () => {
+  const seen: string[] = []
+  const controller = new ExternalUsageController(async name => {
+    seen.push(name)
+    return name === 'KIMI_CODING_API_KEY' ? { value: 'kimi-secret' } : undefined
+  })
+  assert.deepEqual((await controller.status())['kimi-code'], { configured: true })
+  assert.ok(seen.includes('KIMI_CODING_API_KEY'))
+  assert.ok(!JSON.stringify(await controller.status()).includes('kimi-secret'))
+})
+
 test('usage-only keys are resolved on every read so DSH credential changes take effect', async () => {
   let key = 'first'
   const headers: string[] = []
