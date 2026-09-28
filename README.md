@@ -12,9 +12,11 @@ The Settings page now includes usage-only cards for OpenCode Go and Kimi Code. T
 
 Cursor is available as the `cursor-subscription` model route and as a sign-in/usage card on the same Settings page. Its transport is copied from [orrinzeng/dsh-cursor-subscription](https://github.com/orrinzeng/dsh-cursor-subscription) under the MIT license; see [the source note](docs/cursor-origin.md). The DSH `0.1.7-rc.2` boundary projects first-class tool messages into the transport's expected request shape. Its individual-account usage reader calls Cursor dashboard endpoints with a session cookie derived from a Cursor OAuth token. Cursor's documented Admin API is for team usage.
 
-The Cursor card uses its own browser sign-in and stores the resulting credential through DSH. It does not read the local `cursor-agent` credential cache; that file's format and token rotation are outside this plugin's control.
+The Cursor card uses its own browser sign-in and stores the resulting credential through DSH. Its Manage dialog shows the live account model catalog and can refresh the model picker. There is no built-in fallback model list. It does not read the local `cursor-agent` credential cache; that file's format and token rotation are outside this plugin's control.
 
-The Cursor transport passes 75 selected upstream offline tests plus this project's mocked DSH `0.1.7-rc.2` adapter, auth, usage, and RPC tests. An isolated DSH web profile boots with the provider registered. A live Cursor login and model request have not yet been verified.
+The Cursor transport passes 75 selected upstream offline tests plus this project's mocked DSH `0.1.7-rc.2` adapter, auth, usage, and RPC tests. An isolated DSH web profile boots with the provider registered. A live Cursor login and dynamic model discovery have been verified in the isolated DSH profile. A successful live model request remains to be verified.
+
+The plugin uses DSH network settings. Its former proxy card, config file, and RPC endpoints are retired; an old proxy config file is ignored.
 
 ## Development
 

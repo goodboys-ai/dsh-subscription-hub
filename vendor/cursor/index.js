@@ -300,21 +300,6 @@ function abortableDelay(ms, signal) {
 }
 //#endregion
 
-//#region fallback models (used when GetUsableModels is unreachable)
-const FALLBACK_MODELS = Object.freeze([
-	{ id: "composer-2", name: "Composer 2", contextWindow: 200000 },
-	{ id: "claude-4-sonnet", name: "Claude 4 Sonnet", contextWindow: 200000 },
-	{ id: "claude-3.5-sonnet", name: "Claude 3.5 Sonnet", contextWindow: 200000 },
-	{ id: "claude-sonnet-4", name: "Claude Sonnet 4", contextWindow: 200000 },
-	{ id: "gpt-4o", name: "GPT-4o", contextWindow: 128000 },
-	{ id: "gpt-4.1", name: "GPT-4.1", contextWindow: 1000000 },
-	{ id: "o3", name: "o3", contextWindow: 200000 },
-	{ id: "o4-mini", name: "o4-mini", contextWindow: 200000 },
-	{ id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", contextWindow: 1000000 },
-	{ id: "cursor-small", name: "Cursor Small", contextWindow: 200000 },
-]);
-//#endregion
-
 //#region model ordering
 /**
  * Cursor's `GetUsableModels` answers in its own order (newest family first),
@@ -2815,7 +2800,6 @@ export class CursorAdapter extends LlmAdapter {
 		super();
 		this.auth = options.auth;
 		this.fetchModels = options.fetchModels ?? fetchUsableModels;
-		this.fallbackModels = options.fallbackModels ?? FALLBACK_MODELS;
 		this.idleTimeoutMs = options.idleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS;
 		this.progressTimeoutMs = options.progressTimeoutMs ?? STREAM_PROGRESS_TIMEOUT_MS;
 		this.idleCheckIntervalMs = options.idleCheckIntervalMs ?? 15000;
@@ -2856,14 +2840,9 @@ export class CursorAdapter extends LlmAdapter {
 		if (!force && this.#modelsCache.models !== undefined && now - this.#modelsCache.at < this.modelsCacheTtlMs) {
 			return this.#modelsCache.models;
 		}
-		let models;
-		try {
-			const access = await this.auth.accessToken();
-			models = await this.fetchModels(access);
-		} catch {
-			models = [];
-		}
-		const source = models.length > 0 ? models : this.fallbackModels;
+		const access = await this.auth.accessToken();
+		const source = await this.fetchModels(access);
+		if (source.length === 0) throw new Error("Cursor returned no usable models");
 		// Sorted here so the picker and the settings list agree, and so a change
 		// in Cursor's response order cannot reshuffle either surface.
 		const result = sortModelsByName(
@@ -2875,6 +2854,10 @@ export class CursorAdapter extends LlmAdapter {
 		);
 		this.#modelsCache = { at: now, models: result };
 		return result;
+	}
+
+	invalidateModels() {
+		this.#modelsCache = { at: 0, models: undefined };
 	}
 
 	providerInfo(provider) {

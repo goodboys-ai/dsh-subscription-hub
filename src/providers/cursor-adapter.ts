@@ -24,6 +24,8 @@ export class CursorCompatAdapter extends CursorAdapter {
   override stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     return super.stream({
       ...options,
+      // Existing DSH sessions may still hold this retired selection.
+      model: options.model === 'composer-2' ? 'composer-2.5' : options.model,
       messages: projectCursorMessages(options.messages) as GenerateOptions['messages'],
     })
   }

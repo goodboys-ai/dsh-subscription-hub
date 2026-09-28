@@ -55,7 +55,7 @@ import type {
   FetchFn,
   ModelEntry,
 } from './common.js'
-import { proxiedFetch } from '../http.js'
+import { hostFetch } from '../http.js'
 import {
   DEFAULT_RATE_LIMIT_WAIT,
   DEFAULT_RETRY,
@@ -105,7 +105,7 @@ let vscodeVersionInflight: Promise<string> | undefined
  * @param forceRefresh - bypass the cache (a 401 `IDE token expired` retry).
  * @returns a `major.minor.patch` version string.
  */
-export async function latestVsCodeVersion(fetchFn: FetchFn = proxiedFetch, forceRefresh = false): Promise<string> {
+export async function latestVsCodeVersion(fetchFn: FetchFn = hostFetch, forceRefresh = false): Promise<string> {
   if (!forceRefresh && vscodeVersionCache !== undefined
     && Date.now() - vscodeVersionCache.at < VSCODE_VERSION_TTL_MS) {
     return vscodeVersionCache.version
@@ -185,7 +185,7 @@ interface CopilotTokenPair {
  */
 export async function exchangeCopilotToken(
   githubToken: string,
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
 ): Promise<CopilotTokenPair> {
   const response = await fetchFn(COPILOT_TOKEN_URL, {
     headers: {
@@ -218,7 +218,7 @@ export async function exchangeCopilotToken(
  */
 export async function completeCopilotLogin(
   githubToken: string,
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
 ): Promise<CopilotSession> {
   const pair = await exchangeCopilotToken(githubToken, fetchFn)
   let account: string | undefined
@@ -253,7 +253,7 @@ export async function completeCopilotLogin(
  * @param fetchFn - fetch implementation (injectable for tests).
  * @returns the fresh session to store.
  */
-export async function refreshCopilot(session: CopilotSession, fetchFn: FetchFn = proxiedFetch): Promise<CopilotSession> {
+export async function refreshCopilot(session: CopilotSession, fetchFn: FetchFn = hostFetch): Promise<CopilotSession> {
   const pair = await exchangeCopilotToken(session.refreshToken, fetchFn)
   return {
     accessToken: pair.accessToken,
@@ -333,7 +333,7 @@ function copilotReasoning(entry: CopilotWireModel): { efforts: { id: ReasoningEf
  */
 export async function fetchCopilotModels(
   session: CopilotSession,
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
   signal?: AbortSignal,
 ): Promise<DiscoveredModel[]> {
   const response = await fetchFn(COPILOT_MODELS_URL, {
@@ -611,7 +611,7 @@ export interface CopilotAdapterOptions {
   discovery: boolean
   /** Warning sink for discovery failures that fall back to the static catalog. */
   onWarn?: (message: string) => void
-  /** Fetch implementation for discovery (defaults to the proxy-aware fetch). */
+  /** Fetch implementation for discovery (defaults to DSH's network routing). */
   fetchFn?: FetchFn
   /** Resolve the attachment service per request; absent means image requests fail loudly. */
   resolveAttachments?: () => AttachmentStore | undefined
@@ -970,7 +970,7 @@ export class CopilotAdapter extends LlmAdapter {
         // editor version is force-refreshed too: a 401 `IDE token expired`
         // means GitHub raised its minimum VS Code version, and only a fresh
         // Editor-Version header fixes that (a new token does not).
-        await latestVsCodeVersion(this.options.fetchFn ?? proxiedFetch, true)
+        await latestVsCodeVersion(this.options.fetchFn ?? hostFetch, true)
         session = await this.options.tokens.session(account, true)
         response = await this.request(options, session, watchdog.signal, wire, scope)
       }
@@ -1019,13 +1019,13 @@ export class CopilotAdapter extends LlmAdapter {
         callId => this.replayFor(replayScopeKey, callId),
       ))
       : copilotChatRequestBody(options, toChatMessages(messages, options.system))
-    return proxiedFetch(wire === 'responses' ? COPILOT_RESPONSES_URL : COPILOT_API_URL, {
+    return hostFetch(wire === 'responses' ? COPILOT_RESPONSES_URL : COPILOT_API_URL, {
       method: 'POST',
       headers: {
         'authorization': `Bearer ${session.accessToken}`,
         'accept': 'text/event-stream',
         'content-type': 'application/json',
-        ...copilotHeaders(hasVision, await latestVsCodeVersion(this.options.fetchFn ?? proxiedFetch)),
+        ...copilotHeaders(hasVision, await latestVsCodeVersion(this.options.fetchFn ?? hostFetch)),
       },
       body: JSON.stringify(body),
       signal,

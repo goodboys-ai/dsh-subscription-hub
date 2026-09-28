@@ -47,7 +47,7 @@ import type {
   ProviderUsage,
   UsageWindow,
 } from './common.js'
-import { proxiedFetch } from '../http.js'
+import { hostFetch } from '../http.js'
 import {
   DEFAULT_RATE_LIMIT_WAIT,
   DEFAULT_RETRY,
@@ -241,7 +241,7 @@ function codexSession(tokens: CodexTokenResponse, fallback?: CodexSession): Code
  * @returns the session to store.
  */
 export async function exchangeCodexCode(code: string, verifier: string, redirectUri: string): Promise<CodexSession> {
-  const response = await proxiedFetch(CODEX_TOKEN_URL, {
+  const response = await hostFetch(CODEX_TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -262,7 +262,7 @@ export async function exchangeCodexCode(code: string, verifier: string, redirect
  * @returns the fresh session to store.
  */
 export async function refreshCodex(session: CodexSession): Promise<CodexSession> {
-  const response = await proxiedFetch(CODEX_TOKEN_URL, {
+  const response = await hostFetch(CODEX_TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -355,7 +355,7 @@ function codexUsageWindow(value: unknown, fallbackKind: UsageWindow['kind']): Us
  */
 export async function fetchCodexUsage(
   session: CodexSession,
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
   signal?: AbortSignal,
 ): Promise<ProviderUsage> {
   const response = await fetchFn(CODEX_USAGE_URL, {
@@ -440,7 +440,7 @@ function supportsFastTier(entry: CodexWireModel): boolean {
  */
 export async function fetchCodexModels(
   session: CodexSession,
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
   signal?: AbortSignal,
   clientVersion = CODEX_CLIENT_VERSION,
 ): Promise<DiscoveredModel[]> {
@@ -984,7 +984,7 @@ export class CodexAdapter extends LlmAdapter {
     const fast = this.options.speedFor !== undefined
       && await this.options.speedFor(options.sessionId, options.model)
     const body = codexRequestBody(options, toResponsesInput(messages, options.system), fast)
-    return proxiedFetch(CODEX_API_URL, {
+    return hostFetch(CODEX_API_URL, {
       method: 'POST',
       headers: {
         'authorization': `Bearer ${session.accessToken}`,

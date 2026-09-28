@@ -64,7 +64,7 @@ Logged-in cards also show **subscription usage** — per rate-limit window (5-ho
 
 Also included, registered when the matching provider is enabled:
 
-- **`web_search`** provider (Codex) — uses Codex's hosted web search through DSH's native tool and citation UI. It follows the default Codex account and the plugin's proxy configuration. It registers as one candidate behind the host's `web` seam and does not claim it: with no other search provider mounted DSH auto-selects it, and alongside another one you pick the winner with the host's own `web.searchProvider` setting. Turning **Web search** off under Codex's **Provider tools** withdraws this provider, leaving the host's `web_search` tool to whatever else is registered.
+- **`web_search`** provider (Codex) — uses Codex's hosted web search through DSH's native tool and citation UI. It follows the default Codex account and DSH network settings. It registers as one candidate behind the host's `web` seam and does not claim it: with no other search provider mounted DSH auto-selects it, and alongside another one you pick the winner with the host's own `web.searchProvider` setting. Turning **Web search** off under Codex's **Provider tools** withdraws this provider, leaving the host's `web_search` tool to whatever else is registered.
 - **`x_search`** tool (Grok) — xAI's hosted X search, returning `{ answer, citations }`.
 - **`image_generate`** tool (ChatGPT or Grok) — `gpt-image-2` via the Codex backend, or `grok-imagine-image-2.0` via `api.x.ai/v1/images/generations`. The `provider` argument picks the preferred provider (`gpt`, the default, or `grok`); when the preferred one is logged out the other serves as fallback. Images are saved under `~/.dsh/plugins/subscriptions/images/` and the paths returned. The `size`/`quality` arguments map onto Grok's `aspect_ratio`/`quality` on the Grok path.
 - **`video_generate`** tool (Grok) — `grok-imagine-video-1.5` via `api.x.ai/v1/videos` (async submit + poll); MP4s are saved under `~/.dsh/plugins/subscriptions/videos/`, the path returned, and the clip plays inline in the conversation. Supports duration (1–15 s), aspect ratio, resolution, and image-to-video via `image_url`.
@@ -264,13 +264,9 @@ All five routes share Claude Code's own retry shape: ten retries after the first
 
 One trade-off worth knowing: the delay ceiling is shared with that local backoff, so raising `maxWaitMs` also raises how long an unrelated transient failure (`TRANSPORT`, `SERVER`, `TIMEOUT`) can back off for before the finite retry budget runs out — up to 512 s on the last of the ten retries instead of the 60 s cap.
 
-## Proxy
+## Network routing
 
-DSH `v0.1.3-alpha.1` introduces host-managed proxy routing. Prefer configuring `HTTP_PROXY` / `HTTPS_PROXY` (or `ALL_PROXY`) and `NO_PROXY` in the launch environment or `$DSH_HOME/.env`, then restart DSH and **disable the plugin proxy**. See the [DSH network proxy guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.3-alpha.1/docs/user/guide/network-proxy.md). Proxy credentials in environment variables are inherited by child commands; this differs from keeping them in the plugin's private config. Existing settings are not deleted or migrated automatically.
-
-The optional plugin override remains available for supported older DSH hosts and subscription-only routing. Every subscription request — token exchanges, model-API streams, usage lookups, model discovery, and the `web_search` / `x_search` / `image_generate` / `video_generate` tools — can use it. Configure it in **Settings → Subscriptions → Proxy → Configure…**: enable the flag, enter the proxy URL (`http://127.0.0.1:7890`), optional username/password, and an optional comma-separated bypass list (`127.0.0.1`, `localhost`, `*.example.com`). Disabled or bypassed requests use DSH's global fetch routing, **not necessarily a direct connection**; use the host's `NO_PROXY` when direct routing is required. The password is stored in `~/.dsh/plugins/subscriptions/proxy.json` (mode 0600) and is never returned to the browser. A "Test" button probes one endpoint through the current configuration and shows the HTTP status/latency.
-
-Changes apply immediately to subsequent requests — no restart needed. The OAuth authorization page opens in your browser and follows the browser/system proxy, not this setting. SOCKS proxies are not supported.
+This fork uses DSH's host-managed network routing. The plugin-specific proxy settings and RPCs have been retired. Any old `proxy.json` is ignored.
 
 ## Related plugins
 

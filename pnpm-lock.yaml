@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      undici:
-        specifier: ^7.0.0
-        version: 7.29.0
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: 4.0.4
@@ -679,10 +675,6 @@ packages:
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
-  undici@7.29.0:
-    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
-    engines: {node: '>=20.18.1'}
-
   zod@4.5.4:
     resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
 
@@ -1216,7 +1208,5 @@ snapshots:
       unconfig-core: 7.5.0
 
   undici-types@7.18.2: {}
-
-  undici@7.29.0: {}
 
   zod@4.5.4: {}

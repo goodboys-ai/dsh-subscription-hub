@@ -27,7 +27,7 @@ import { ImageAccountPool } from '../providers/image-pool.js'
 import { codexRateLimitReset } from '../providers/codex.js'
 import { grokRateLimitReset } from '../providers/grok.js'
 import type { FetchFn } from '../providers/common.js'
-import { proxiedFetch } from '../http.js'
+import { hostFetch } from '../http.js'
 
 /** Endpoint the codex generation request is posted to. */
 export const IMAGE_GENERATE_URL = 'https://chatgpt.com/backend-api/codex/images/generations'
@@ -412,7 +412,7 @@ export function createImageGenerateTool(options: ImageGenerateToolOptions): Tool
       content: result.content.filter(block => block.type === 'text'),
     }),
     async execute(args, exec) {
-      const fetchFn = options.fetchFn ?? proxiedFetch
+      const fetchFn = options.fetchFn ?? hostFetch
       // Validate the prompt even when references cannot be resolved.
       buildImageGenerateBody(args)
       const references = await resolveReferenceImages(args.referenceImages, options.resolveAttachments?.(), exec.signal)

@@ -78,6 +78,12 @@ test('Cursor RPC exposes browser login and status without returning OAuth tokens
   const missing = await handler('cursorUsage', {}, signal)
   assert.equal(missing.ok, false)
   if (!missing.ok) assert.match(missing.error.message, /not signed in/)
+  const models = await handler('cursorModels', {}, signal)
+  assert.equal(models.ok, false)
+  if (!models.ok) assert.match(models.error.message, /not signed in/)
+  for (const endpoint of ['proxyGet', 'proxySet', 'proxyTest']) {
+    await assert.rejects(handler(endpoint, {}, signal), /no route registered/)
+  }
 })
 
 const REF = { attachmentId: 'att-1', mediaType: 'image/png', bytes: 2, width: 1, height: 1 }

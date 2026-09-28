@@ -1,4 +1,4 @@
-import { proxiedFetch } from '../http.js'
+import { hostFetch } from '../http.js'
 import type { FetchFn } from './common.js'
 
 /** Stable `major.minor.patch` only: prerelease and platform tags are not client versions. */
@@ -46,7 +46,7 @@ export class NpmCliVersionCache {
   private readonly timeoutMs: number
 
   constructor(private readonly options: NpmCliVersionOptions) {
-    this.fetchFn = options.fetchFn ?? proxiedFetch
+    this.fetchFn = options.fetchFn ?? hostFetch
     this.now = options.now ?? Date.now
     this.timeoutMs = options.timeoutMs ?? 5000
   }

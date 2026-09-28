@@ -17,7 +17,6 @@ import type { ProviderUsage } from '../providers/common.js'
 import { EXTERNAL_USAGE_SOURCES } from '../providers/external-usage-controller.js'
 import type { ExternalUsageSource, ExternalUsageStatus } from '../providers/external-usage-controller.js'
 import type { CursorAuthStatus } from '../providers/cursor-auth.js'
-import type { ProxyConfigView, ProxyDraft, ProxyInput, ProxyTestResult } from '../http.js'
 
 /**
  * Endpoint-name prefix under the shared `/api` channel: endpoint `status`
@@ -34,10 +33,9 @@ export const SUBSCRIPTIONS_AUTH_ENDPOINTS = [
   'providerSettings', 'setProviderSettings',
   'status', 'login', 'manual', 'cancel', 'logout', 'setDefault', 'usage',
   'externalStatus', 'externalUsage',
-  'cursorStatus', 'cursorLogin', 'cursorCancel', 'cursorLogout', 'cursorUsage',
+  'cursorStatus', 'cursorLogin', 'cursorCancel', 'cursorLogout', 'cursorUsage', 'cursorModels',
   'image', 'video',
   'speed', 'setSpeed',
-  'proxyGet', 'proxySet', 'proxyTest',
   'modelDefaults', 'setModelDefault',
 ] as const
 
@@ -104,16 +102,6 @@ export interface ProviderStatus {
 
 /** How a Claude login should acquire credentials (other providers ignore it). */
 export type LoginMethod = 'oauth' | 'keychain'
-
-/** Proxy config operations behind the `proxyGet/proxySet/proxyTest` endpoints. */
-export interface ProxyConfigController {
-  /** Current proxy configuration (secrets omitted). */
-  get(): Promise<ProxyConfigView>
-  /** Validate, persist, and apply one config. */
-  set(input: ProxyInput): Promise<ProxyConfigView>
-  /** Probe one destination through the draft (unsaved) or stored proxy. */
-  test(payload: { url?: string; proxy?: ProxyDraft }): Promise<ProxyTestResult>
-}
 
 /** One model's default-effort picker state, as rendered by the Settings page. */
 export interface ModelDefaultView {
@@ -227,6 +215,7 @@ export interface CursorRpcController {
   cancel(): Promise<void>
   logout(): Promise<void>
   usage(signal: AbortSignal): Promise<ProviderUsage>
+  models(force: boolean, signal: AbortSignal): Promise<{ id: string; name: string }[]>
 }
 
 /**
@@ -445,88 +434,9 @@ function readSessionId(payload: unknown): string {
   return readString(payload, 'sessionId')
 }
 
-/** Validate a `proxySet` payload into a shape `ProxyInput` accepts. */
-function readProxyInput(payload: unknown): ProxyInput {
-  if (typeof payload !== 'object' || payload === null) throw new BadRequest('payload must be an object')
-  const record = payload as Record<string, unknown>
-  if (typeof record.enabled !== 'boolean') throw new BadRequest('payload.enabled must be a boolean')
-  if (typeof record.url !== 'string') throw new BadRequest('payload.url must be a string')
-  let username: string | undefined
-  if (record.username !== undefined) {
-    if (typeof record.username !== 'string') throw new BadRequest('payload.username must be a string when present')
-    username = record.username
-  }
-  let password: string | null | undefined
-  if (record.password !== undefined) {
-    if (record.password !== null && typeof record.password !== 'string') {
-      throw new BadRequest('payload.password must be a string or null when present')
-    }
-    password = record.password
-  }
-  let bypass: string[] | undefined
-  if (record.bypass !== undefined) {
-    if (!Array.isArray(record.bypass) || record.bypass.some(entry => typeof entry !== 'string')) {
-      throw new BadRequest('payload.bypass must be an array of strings when present')
-    }
-    bypass = record.bypass
-  }
-  return {
-    enabled: record.enabled,
-    url: record.url,
-    ...username === undefined ? {} : { username },
-    ...password === undefined ? {} : { password },
-    ...bypass === undefined ? {} : { bypass },
-  }
-}
-
-/** Validate a `proxyTest` payload (the destination URL and an optional draft). */
-function readProxyTestPayload(payload: unknown): { url?: string; proxy?: ProxyDraft } {
-  if (typeof payload !== 'object' || payload === null) return {}
-  const record = payload as Record<string, unknown>
-  const url = record.url
-  if (url === undefined && record.proxy === undefined) return {}
-  if (url !== undefined && (typeof url !== 'string' || url.length === 0)) {
-    throw new BadRequest('payload.url must be a non-empty string when present')
-  }
-  let proxy: ProxyDraft | undefined
-  if (record.proxy !== undefined) {
-    if (typeof record.proxy !== 'object' || record.proxy === null) {
-      throw new BadRequest('payload.proxy must be an object when present')
-    }
-    const draftRecord = record.proxy as Record<string, unknown>
-    if (typeof draftRecord.url !== 'string' || draftRecord.url.length === 0) {
-      throw new BadRequest('payload.proxy.url must be a non-empty string')
-    }
-    let username: string | undefined
-    if (draftRecord.username !== undefined) {
-      if (typeof draftRecord.username !== 'string') {
-        throw new BadRequest('payload.proxy.username must be a string when present')
-      }
-      username = draftRecord.username
-    }
-    let password: string | undefined
-    if (draftRecord.password !== undefined) {
-      if (typeof draftRecord.password !== 'string') {
-        throw new BadRequest('payload.proxy.password must be a string when present')
-      }
-      password = draftRecord.password
-    }
-    proxy = {
-      url: draftRecord.url,
-      ...username === undefined ? {} : { username },
-      ...password === undefined ? {} : { password },
-    }
-  }
-  return {
-    ...url === undefined ? {} : { url },
-    ...proxy === undefined ? {} : { proxy },
-  }
-}
-
 async function dispatch(
   controller: AuthController,
   speed: SpeedController,
-  proxy: ProxyConfigController | undefined,
   modelDefaults: ModelDefaultsController | undefined,
   endpoint: string,
   payload: unknown,
@@ -612,6 +522,9 @@ async function dispatch(
     case 'cursorUsage':
       if (!cursor) throw new BadRequest('Cursor account is unavailable')
       return ok(await cursor.usage(signal))
+    case 'cursorModels':
+      if (!cursor) throw new BadRequest('Cursor account is unavailable')
+      return ok(await cursor.models(readForce(payload), signal))
     case 'image':
       return ok(await controller.readImage(readImageRef(payload), signal))
     case 'video':
@@ -621,15 +534,6 @@ async function dispatch(
     case 'setSpeed':
       await speed.setSpeed(readSessionId(payload), readSpeedTier(payload))
       return ok({ ok: true })
-    case 'proxyGet':
-      if (proxy === undefined) throw new BadRequest('proxy configuration is unavailable')
-      return ok(await proxy.get())
-    case 'proxySet':
-      if (proxy === undefined) throw new BadRequest('proxy configuration is unavailable')
-      return ok(await proxy.set(readProxyInput(payload)))
-    case 'proxyTest':
-      if (proxy === undefined) throw new BadRequest('proxy configuration is unavailable')
-      return ok(await proxy.test(readProxyTestPayload(payload)))
     case 'modelDefaults': {
       if (modelDefaults === undefined) throw new BadRequest('model defaults are unavailable')
       return ok(await modelDefaults.catalog(readForce(payload)))
@@ -651,14 +555,12 @@ async function dispatch(
  * @param ctx - the plugin context (headless profiles have no `connection`).
  * @param controller - the auth operations backing the endpoints.
  * @param speed - the per-session speed-tier state backing the Speed toggle.
- * @param proxy - optional proxy-config controller backing `proxyGet`/`proxySet`/`proxyTest`.
  * @param modelDefaults - optional per-model default-effort state backing `modelDefaults`/`setModelDefault`.
  */
 export function registerAuthRpc(
   ctx: Context,
   controller: AuthController,
   speed: SpeedController,
-  proxy: ProxyConfigController | undefined = undefined,
   modelDefaults: ModelDefaultsController | undefined = undefined,
   providerSettings: ProviderSettingsController | undefined = undefined,
   externalUsage: ExternalUsageRpcController | undefined = undefined,
@@ -680,7 +582,7 @@ export function registerAuthRpc(
     const connection = ctx.get('connection') as HostConnectionHandle
     const handler: ConnectionRpcHandler = async (endpoint, payload, signal) => {
       try {
-        return await dispatch(controller, speed, proxy, modelDefaults, endpoint, payload, signal, providerSettings, externalUsage, cursor)
+        return await dispatch(controller, speed, modelDefaults, endpoint, payload, signal, providerSettings, externalUsage, cursor)
       } catch (error) {
         return failure(error)
       }

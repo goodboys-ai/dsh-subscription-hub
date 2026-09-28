@@ -135,7 +135,7 @@ import type { AntigravityRuntimeConfig } from './providers/antigravity.js'
 import { createXSearchTool } from './tools/x-search.js'
 import { createImageGenerateTool } from './tools/image-generate.js'
 import { createVideoGenerateTool, videosDirectory } from './tools/video-generate.js'
-import { ensureConnectAttemptTimeout, proxiedFetch, proxyGetConfig, proxySetConfig, proxyTestConnection, restoreConnectAttemptTimeout } from './http.js'
+import { ensureConnectAttemptTimeout, hostFetch, restoreConnectAttemptTimeout } from './http.js'
 import { ProviderSettingsStore, PROVIDER_TOOLS, validatePreferences } from './provider-settings.js'
 
 export type { ModelEntry, ProviderUsage, UsageWindow } from './providers/common.js'
@@ -753,7 +753,7 @@ export function apply(ctx: Context, config: Config): void {
         codexTokens = tokens
         accountTokens.set('codex', tokens as AccountTokenManager<StoredSession>)
         usageFetchers.codex = async (account, signal) =>
-          fetchCodexUsage(await tokens.session(account), proxiedFetch, signal)
+          fetchCodexUsage(await tokens.session(account), hostFetch, signal)
         let adapter!: CodexAdapter
         adapter = new CodexAdapter({
           ...config.codexClientVersion === undefined ? {} : { clientVersion: config.codexClientVersion },
@@ -800,7 +800,7 @@ export function apply(ctx: Context, config: Config): void {
         claudeTokens = tokens
         accountTokens.set('claude', tokens as AccountTokenManager<StoredSession>)
         usageFetchers.claude = async (account, signal) =>
-          fetchClaudeUsage(await tokens.session(account), proxiedFetch, signal, () => claudeVersion.resolve())
+          fetchClaudeUsage(await tokens.session(account), hostFetch, signal, () => claudeVersion.resolve())
         const adapter = new ClaudeAdapter({
           models: catalog.claude,
           streamIdleTimeoutMs,
@@ -832,7 +832,7 @@ export function apply(ctx: Context, config: Config): void {
         grokTokens = tokens
         accountTokens.set('grok', tokens as AccountTokenManager<StoredSession>)
         usageFetchers.grok = async (account, signal) =>
-          fetchGrokUsage(await tokens.session(account), proxiedFetch, signal)
+          fetchGrokUsage(await tokens.session(account), hostFetch, signal)
         const adapter = new GrokAdapter({
           models: catalog.grok,
           streamIdleTimeoutMs,
@@ -894,7 +894,7 @@ export function apply(ctx: Context, config: Config): void {
         })
         accountTokens.set('antigravity', tokens as AccountTokenManager<StoredSession>)
         usageFetchers.antigravity = async (account, signal) => fetchAntigravityUsage(
-          await tokens.session(account), config.antigravity, proxiedFetch, signal,
+          await tokens.session(account), config.antigravity, hostFetch, signal,
         )
         const adapter = new AntigravityAdapter({
           models: catalog.antigravity,
@@ -933,14 +933,14 @@ export function apply(ctx: Context, config: Config): void {
         case 'codex': {
           const tokens = codexTokens
           return tokens === undefined ? undefined : async () =>
-            fetchCodexUsage(await tokens.session(account), proxiedFetch, AbortSignal.timeout(POOL_USAGE_TIMEOUT_MS))
+            fetchCodexUsage(await tokens.session(account), hostFetch, AbortSignal.timeout(POOL_USAGE_TIMEOUT_MS))
         }
         case 'claude': {
           const tokens = claudeTokens
           return tokens === undefined ? undefined : async () =>
             fetchClaudeUsage(
               await tokens.session(account),
-              proxiedFetch,
+              hostFetch,
               AbortSignal.timeout(POOL_USAGE_TIMEOUT_MS),
               () => claudeVersion.resolve(),
             )
@@ -948,12 +948,12 @@ export function apply(ctx: Context, config: Config): void {
         case 'grok': {
           const tokens = grokTokens
           return tokens === undefined ? undefined : async () =>
-            fetchGrokUsage(await tokens.session(account), proxiedFetch, AbortSignal.timeout(POOL_USAGE_TIMEOUT_MS))
+            fetchGrokUsage(await tokens.session(account), hostFetch, AbortSignal.timeout(POOL_USAGE_TIMEOUT_MS))
         }
         case 'antigravity': {
           const tokens = accountTokens.get('antigravity')
           return tokens === undefined ? undefined : async () => fetchAntigravityUsage(
-            await tokens.session(account) as AntigravitySession, config.antigravity, proxiedFetch,
+            await tokens.session(account) as AntigravitySession, config.antigravity, hostFetch,
             AbortSignal.timeout(POOL_USAGE_TIMEOUT_MS),
           )
         }
@@ -1132,27 +1132,27 @@ export function apply(ctx: Context, config: Config): void {
   }
   let resolveExternalCredential: ((name: string) => Promise<{ value: string } | undefined>) | undefined
   let cursorAuth: CursorAuth | undefined
+  let cursorAdapter: CursorCompatAdapter | undefined
+  let cursorHandle: AdapterRegistrationHandle | undefined
+  let cursorAuthenticated: boolean | undefined
   let cursorAttachments: AttachmentStore | undefined
   ctx.inject(['attachments'], attachmentsCtx => { cursorAttachments = attachmentsCtx.attachments })
   ctx.inject(['credentials'], credentialsCtx => {
     resolveExternalCredential = name => credentialsCtx.credentials.resolve(credentialRef(name))
-    cursorAuth = new CursorAuth(credentialsCtx.credentials, proxiedFetch)
-    credentialsCtx.llm.registerAdapter(['cursor-subscription'], new CursorCompatAdapter({
+    cursorAuth = new CursorAuth(credentialsCtx.credentials, hostFetch)
+    cursorAdapter = new CursorCompatAdapter({
       auth: cursorAuth,
       resolveAttachments: () => cursorAttachments,
-    }))
+    })
+    cursorHandle = credentialsCtx.llm.registerAdapter(['cursor-subscription'], cursorAdapter)
   })
   const externalUsage = new ExternalUsageController(
     async name => resolveExternalCredential?.(name),
-    proxiedFetch,
+    hostFetch,
   )
   registerAuthRpc(ctx, new SubscriptionsAuthController(
     flows, deviceFlows, authChanged, resolveAttachments, usageFetchers, undefined, poolUsage, config.antigravity,
-  ), speed, {
-    get: () => proxyGetConfig(),
-    set: input => proxySetConfig(input),
-    test: payload => proxyTestConnection(payload.url, payload.proxy),
-  }, modelDefaults, {
+  ), speed, modelDefaults, {
     async get(provider, force) {
       await loadModelDefaults()
       const adapter = adapters.get(provider)
@@ -1214,17 +1214,37 @@ export function apply(ctx: Context, config: Config): void {
       for (const [route, handle] of handles) handle.replace([route])
     },
   }, externalUsage, {
-    status: () => cursorAuth === undefined
-      ? Promise.resolve({ authenticated: false, busy: false }) : cursorAuth.status(),
+    status: async () => {
+      const status = cursorAuth === undefined
+        ? { authenticated: false, busy: false } : await cursorAuth.status()
+      if (cursorAuthenticated !== status.authenticated) {
+        cursorAuthenticated = status.authenticated
+        cursorAdapter?.invalidateModels()
+        cursorHandle?.replace(['cursor-subscription'])
+      }
+      return status
+    },
     login: () => {
       if (cursorAuth === undefined) throw new Error('DSH credentials are unavailable')
       return cursorAuth.login()
     },
     cancel: async () => { await cursorAuth?.cancel() },
-    logout: async () => { await cursorAuth?.logout() },
+    logout: async () => {
+      await cursorAuth?.logout()
+      cursorAuthenticated = false
+      cursorAdapter?.invalidateModels()
+      cursorHandle?.replace(['cursor-subscription'])
+    },
     usage: async signal => {
       if (cursorAuth === undefined) throw new Error('DSH credentials are unavailable')
-      return fetchCursorUsage(await cursorAuth.accessToken({ signal }), proxiedFetch, signal)
+      return fetchCursorUsage(await cursorAuth.accessToken({ signal }), hostFetch, signal)
+    },
+    models: async (force, signal) => {
+      if (cursorAdapter === undefined) throw new Error('Cursor model provider is unavailable')
+      if (force) cursorAdapter.invalidateModels()
+      const models = await cursorAdapter.listModelsForRpc({ force, signal })
+      if (force) cursorHandle?.replace(['cursor-subscription'])
+      return models
     },
   })
 
@@ -1263,7 +1283,7 @@ export function apply(ctx: Context, config: Config): void {
       webCtx.web.registerSearchProvider(new CodexWebSearchProvider({
         tokens,
         enabled: () => preferences.toolEnabled('codex', 'web_search'),
-        fetchFn: proxiedFetch,
+        fetchFn: hostFetch,
       }))
     })
   }

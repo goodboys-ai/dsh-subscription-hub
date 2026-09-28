@@ -44,7 +44,7 @@ import type {
   ProviderUsage,
   UsageWindow,
 } from './common.js'
-import { proxiedFetch } from '../http.js'
+import { hostFetch } from '../http.js'
 import { ANTIGRAVITY_DEFAULT_CLIENT_ID, ANTIGRAVITY_DEFAULT_CLIENT_SECRET } from './antigravity-oauth-client.js'
 import { AccountTokenManager, DISCOVERY_TIMEOUT_MS, unionAccountCatalogs } from './accounts.js'
 import type { PoolAdapter } from './pool.js'
@@ -230,7 +230,7 @@ interface LoadCodeAssistResponse {
 export async function discoverAntigravityAccount(
   accessToken: string,
   runtime: AntigravityRuntimeConfig = {},
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
 ): Promise<AntigravityAccountInfo> {
   const metadata = { ideType: 'ANTIGRAVITY', platform: 'PLATFORM_UNSPECIFIED', pluginType: 'GEMINI' }
   const load = await callInternal<LoadCodeAssistResponse>('loadCodeAssist', { metadata }, accessToken, runtime, fetchFn)
@@ -303,7 +303,7 @@ export async function exchangeAntigravityCode(
   redirectUri: string,
   oauth: AntigravityOAuthConfig,
   runtime: AntigravityRuntimeConfig = {},
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
 ): Promise<AntigravitySession> {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -329,7 +329,7 @@ export async function exchangeAntigravityCode(
 export async function refreshAntigravity(
   session: AntigravitySession,
   oauth: AntigravityOAuthConfig,
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
 ): Promise<AntigravitySession> {
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
@@ -376,7 +376,7 @@ interface AntigravityModelsResponse {
 export async function fetchAntigravityModels(
   session: AntigravitySession,
   runtime: AntigravityRuntimeConfig = {},
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
   signal?: AbortSignal,
 ): Promise<DiscoveredModel[]> {
   const payload = await callInternal<AntigravityModelsResponse>(
@@ -429,7 +429,7 @@ function usageWindow(
 export async function fetchAntigravityUsage(
   session: AntigravitySession,
   runtime: AntigravityRuntimeConfig = {},
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
   signal?: AbortSignal,
 ): Promise<ProviderUsage> {
   const metadata = { ideType: 'ANTIGRAVITY', platform: 'PLATFORM_UNSPECIFIED', pluginType: 'GEMINI' }
@@ -468,7 +468,7 @@ export async function requestAntigravityContent(
   payload: AntigravityRequest,
   stream: boolean,
   runtime: AntigravityRuntimeConfig = {},
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
   signal?: AbortSignal,
 ): Promise<Response> {
   return fetchAntigravity(stream ? 'streamGenerateContent?alt=sse' : 'generateContent', {

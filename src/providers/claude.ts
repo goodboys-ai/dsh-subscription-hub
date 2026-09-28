@@ -42,7 +42,7 @@ import {
 } from './common.js'
 import { AccountTokenManager, DISCOVERY_TIMEOUT_MS, unionAccountCatalogs } from './accounts.js'
 import type { CatalogPersistence, DiscoveredModel, FetchFn, ModelEntry, ProviderUsage, UsageWindow } from './common.js'
-import { proxiedFetch } from '../http.js'
+import { hostFetch } from '../http.js'
 import { compareVersions } from './npm-cli-version.js'
 import {
   DEFAULT_RATE_LIMIT_WAIT,
@@ -209,7 +209,7 @@ interface ClaudeTokenResponse {
 /** Best-effort account profile; login must not fail when this does. */
 async function fetchClaudeProfile(accessToken: string): Promise<Pick<ClaudeSession, 'emailAddress' | 'subscriptionType'>> {
   try {
-    const response = await proxiedFetch(CLAUDE_PROFILE_URL, {
+    const response = await hostFetch(CLAUDE_PROFILE_URL, {
       headers: { authorization: `Bearer ${accessToken}` },
     })
     if (!response.ok) return {}
@@ -267,7 +267,7 @@ export async function exchangeClaudeCode(
   redirectUri: string,
   state: string,
 ): Promise<ClaudeSession> {
-  const response = await proxiedFetch(CLAUDE_TOKEN_URL, {
+  const response = await hostFetch(CLAUDE_TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -289,7 +289,7 @@ export async function exchangeClaudeCode(
  * @returns the fresh session to store.
  */
 export async function refreshClaude(session: ClaudeSession): Promise<ClaudeSession> {
-  const response = await proxiedFetch(CLAUDE_TOKEN_URL, {
+  const response = await hostFetch(CLAUDE_TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -385,7 +385,7 @@ function claudeLimitsWindows(value: unknown): UsageWindow[] {
  */
 export async function fetchClaudeUsage(
   session: ClaudeSession,
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
   signal?: AbortSignal,
   cliVersion: () => Promise<string> = localClaudeCliVersion,
 ): Promise<ProviderUsage> {
@@ -477,7 +477,7 @@ function positiveTokenCount(value: unknown): number | undefined {
  */
 export async function fetchClaudeModels(
   session: ClaudeSession,
-  fetchFn: FetchFn = proxiedFetch,
+  fetchFn: FetchFn = hostFetch,
   signal?: AbortSignal,
   cliVersion: () => Promise<string> = localClaudeCliVersion,
 ): Promise<DiscoveredModel[]> {
@@ -832,7 +832,7 @@ export class ClaudeAdapter extends LlmAdapter {
       : undefined
     const body = claudeRequestBody(options, messages, maxTokens, thinking, effort)
     const cliVersion = await (this.options.resolveCliVersion ?? localClaudeCliVersion)()
-    return proxiedFetch(CLAUDE_API_URL, {
+    return hostFetch(CLAUDE_API_URL, {
       method: 'POST',
       headers: {
         'authorization': `Bearer ${session.accessToken}`,

@@ -11,6 +11,8 @@ export class CursorAdapter extends LlmAdapter {
   })
   providerInfo(provider: string): { id: string; name: string }
   listModels(provider: string): Promise<LlmModelInfo[]>
+  listModelsForRpc(options?: { force?: boolean; signal?: AbortSignal }): Promise<{ id: string; name: string }[]>
+  invalidateModels(): void
   resolveModel(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>
   stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 }
