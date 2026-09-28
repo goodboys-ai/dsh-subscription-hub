@@ -1,44 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ProviderUsage, SubscriptionsSectionInjected } from './SubscriptionsSection.js'
 import { callSubscriptionsAuth } from './subscriptions-rpc.js'
 import { ProviderAccountManager } from './ProviderAccountManager.js'
 import { USAGE_BADGE_REFRESH_EVENT } from './usage-badge-preferences.js'
+import { subscriptionCardStyles as styles } from './subscription-card-styles.js'
 
 type Translate = SubscriptionsSectionInjected['t']
 type CursorStatus = { authenticated: boolean; busy: boolean; expiresAt?: number; error?: string }
-
-const styles: Record<string, CSSProperties> = {
-  card: { border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12, padding: '12px 14px',
-    display: 'flex', flexDirection: 'column', gap: 6, color: 'var(--dsw-alias-label-primary)' },
-  header: { display: 'flex', alignItems: 'center', gap: 8 },
-  dot: { width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
-  name: { fontWeight: 500, fontSize: 14, lineHeight: '22px' },
-  status: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
-  error: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-state-error-primary)' },
-  actions: { display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' },
-  button: { boxSizing: 'border-box', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    height: 28, padding: '0 10px', borderRadius: 14, border: '1px solid var(--dsw-alias-border-l2)',
-    background: 'transparent', color: 'var(--dsw-alias-label-primary)', font: 'inherit',
-    fontSize: 12, lineHeight: '18px', cursor: 'pointer' },
-  account: { display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--dsw-alias-border-l2)',
-    borderRadius: 8, padding: '8px 10px', marginTop: 4 },
-  accountHeader: { display: 'flex', alignItems: 'center', gap: 8 },
-  accountName: { fontSize: 13, lineHeight: '20px' },
-  usage: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4,
-    borderTop: '1px solid var(--dsw-alias-border-l2)', paddingTop: 8 },
-  usageHeader: { display: 'flex', alignItems: 'center', gap: 8 },
-  usageTitle: { fontSize: 12, lineHeight: '18px', fontWeight: 500, color: 'var(--dsw-alias-label-secondary)' },
-  usageRefresh: { boxSizing: 'border-box', height: 22, padding: '0 8px', borderRadius: 11, marginLeft: 'auto',
-    border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent',
-    color: 'var(--dsw-alias-label-secondary)', font: 'inherit', fontSize: 12, cursor: 'pointer' },
-  usageRow: { display: 'flex', flexDirection: 'column', gap: 3 },
-  usageMeta: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12,
-    lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
-  usageTrack: { height: 6, borderRadius: 3, overflow: 'hidden', background: 'var(--dsw-alias-bg-layer-1)',
-    border: '1px solid var(--dsw-alias-border-l2)' },
-}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -128,7 +97,7 @@ export function CursorCard({ rpc, t }: { rpc: ConnectionHandle['rpc']; t: Transl
     {error !== undefined && <p style={styles.error}>{error}</p>}
     {connected && <div style={styles.account}>
       <div style={styles.accountHeader}>
-        <span style={{ color: 'var(--dsw-alias-state-warn-label)' }} title={t('defaultBadge')}>★</span>
+        <span style={styles.defaultStar} title={t('defaultBadge')}>★</span>
         <span style={styles.accountName}>Cursor</span>
         {status.expiresAt !== undefined && <span style={styles.status}>
           {t('accountExpires', { date: new Date(status.expiresAt).toLocaleString() })}</span>}

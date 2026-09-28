@@ -21,6 +21,7 @@ import { ExternalUsageCards } from './ExternalUsageCards.js'
 import { CursorCard } from './CursorCard.js'
 import { UsageBadgeDisplaySetting } from './UsageBadgeDisplaySetting.js'
 import { USAGE_BADGE_REFRESH_EVENT } from './usage-badge-preferences.js'
+import { subscriptionCardStyles as cardStyles } from './subscription-card-styles.js'
 import type { SubscriptionsKey } from './locales.js'
 
 import { callSubscriptionsAuth, SubscriptionsAuthError } from './subscriptions-rpc.js'
@@ -155,60 +156,31 @@ const styles: Record<string, CSSProperties> = {
     color: 'var(--dsw-alias-label-primary)',
   },
   intro: { margin: 0, color: 'var(--dsw-alias-label-tertiary)', fontSize: 14, lineHeight: '22px' },
-  card: {
-    border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12,
-    padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6,
-  },
-  separator: { borderTop: '1px solid var(--dsw-alias-border-l2)' },
-  cardHeader: { display: 'flex', alignItems: 'center', gap: 8 },
-  dot: { width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
-  name: { fontWeight: 500, fontSize: 14, lineHeight: '22px', color: 'var(--dsw-alias-label-primary)' },
-  statusLine: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
-  errorLine: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-state-error-primary)' },
-  actions: { display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' },
-  button: {
-    boxSizing: 'border-box', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    height: 28, padding: '0 10px', borderRadius: 14,
-    border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent',
-    color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 12, lineHeight: '18px',
-    cursor: 'pointer',
-  },
-  usage: {
-    display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4,
-    borderTop: '1px solid var(--dsw-alias-border-l2)', paddingTop: 8,
-  },
-  usageHeader: { display: 'flex', alignItems: 'center', gap: 8 },
-  usageTitle: { fontSize: 12, lineHeight: '18px', fontWeight: 500, color: 'var(--dsw-alias-label-secondary)' },
-  usagePlan: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)' },
-  usageRefresh: {
-    boxSizing: 'border-box', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    height: 22, padding: '0 8px', borderRadius: 11, marginLeft: 'auto',
-    border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent',
-    color: 'var(--dsw-alias-label-secondary)', font: 'inherit', fontSize: 12, lineHeight: '18px',
-    cursor: 'pointer',
-  },
-  usageRow: { display: 'flex', flexDirection: 'column', gap: 3 },
-  usageMeta: {
-    display: 'flex', justifyContent: 'space-between', gap: 8,
-    fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)',
-  },
-  accountRow: {
-    display: 'flex', flexDirection: 'column', gap: 6,
-    border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8,
-    padding: '8px 10px', marginTop: 4,
-  },
-  accountHeader: { display: 'flex', alignItems: 'center', gap: 8 },
-  accountName: { fontSize: 13, lineHeight: '20px', color: 'var(--dsw-alias-label-primary)', userSelect: 'all' },
+  card: cardStyles.card,
+  cardHeader: cardStyles.header,
+  dot: cardStyles.dot,
+  name: cardStyles.name,
+  statusLine: cardStyles.status,
+  errorLine: cardStyles.error,
+  actions: cardStyles.actions,
+  button: cardStyles.button,
+  usage: cardStyles.usage,
+  usageHeader: cardStyles.usageHeader,
+  usageTitle: cardStyles.usageTitle,
+  usagePlan: cardStyles.usagePlan,
+  usageRefresh: cardStyles.usageRefresh,
+  usageRow: cardStyles.usageRow,
+  usageMeta: cardStyles.usageMeta,
+  accountRow: cardStyles.account,
+  accountHeader: cardStyles.accountHeader,
+  accountName: cardStyles.accountName,
   starButton: {
     border: 'none', background: 'transparent', padding: 0,
     font: 'inherit', fontSize: 14, lineHeight: '20px', cursor: 'pointer',
     color: 'var(--dsw-alias-state-warn-label)',
   },
-  usageTrack: {
-    height: 6, borderRadius: 3, overflow: 'hidden',
-    background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l2)',
-  },
-  usageFill: { height: '100%', borderRadius: 3 },
+  usageTrack: cardStyles.usageTrack,
+  usageFill: cardStyles.usageFill,
   deviceCode: {
     marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6,
     border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8,
@@ -800,9 +772,7 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
           </div>
         )
       })}
-      <div style={styles.separator} />
       <CursorCard rpc={rpc} t={t} />
-      <div style={styles.separator} />
       <ExternalUsageCards rpc={rpc} t={t} />
       {managedProvider && <ProviderAccountManager provider={managedProvider.id} name={managedProvider.name}
         rpc={rpc} t={t} onClose={() => setManagedProvider(undefined)} />}

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ProviderUsage, SubscriptionsSectionInjected } from './SubscriptionsSection.js'
 import { callSubscriptionsAuth } from './subscriptions-rpc.js'
+import { subscriptionCardStyles as styles } from './subscription-card-styles.js'
+import { USAGE_BADGE_REFRESH_EVENT } from './usage-badge-preferences.js'
 
 type Source = 'opencode-go' | 'kimi-code'
 type Translate = SubscriptionsSectionInjected['t']
@@ -37,6 +39,7 @@ export function ExternalUsageCards({ rpc, t }: { rpc: ConnectionHandle['rpc']; t
     try {
       const value = await callSubscriptionsAuth<ProviderUsage>(rpc, 'externalUsage', { source })
       setUsage(prev => ({ ...prev, [source]: value }))
+      window.dispatchEvent(new Event(USAGE_BADGE_REFRESH_EVENT))
     } catch (error) {
       setErrors(prev => ({ ...prev, [source]: errorText(error) }))
     } finally {
@@ -57,54 +60,62 @@ export function ExternalUsageCards({ rpc, t }: { rpc: ConnectionHandle['rpc']; t
     void refreshStatus()
   }, [refreshStatus])
 
-  return <section style={{ display: 'grid', gap: 12 }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <strong style={{ color: 'var(--dsw-alias-label-primary)' }}>{t('externalUsageTitle')}</strong>
-      <button type="button" style={{ marginLeft: 'auto' }} onClick={() => { void refreshStatus() }}>
-        {t('usageRefresh')}
-      </button>
-    </div>
-    {statusError !== undefined && <p style={{ color: 'var(--dsw-alias-state-error-primary)' }}>
-      {t('externalUsageUnavailable', { message: statusError })}
-    </p>}
+  return <>
     {SOURCES.map(({ id, name, ref }) => {
       const configured = status?.[id]?.configured === true
       const snapshot = usage[id]
-      return <div key={id} style={{
-        border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12, padding: '12px 14px',
-        color: 'var(--dsw-alias-label-primary)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <strong>{name}</strong>
-          {configured && <button type="button" style={{ marginLeft: 'auto' }}
-            disabled={loading[id] === true} onClick={() => { void refresh(id) }}>
-            {t('usageRefresh')}
-          </button>}
+      return <div key={id} style={styles.card}>
+        <div style={styles.header}>
+          <span style={{ ...styles.dot, background: configured
+            ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-dimmed)' }} />
+          <span style={styles.name}>{name}</span>
         </div>
-        {status === undefined && statusError === undefined && <p>{t('usageLoading')}</p>}
-        {status !== undefined && !configured && <p>{t('externalUsageConfigure', { ref })}</p>}
-        {configured && loading[id] === true && snapshot === undefined && <p>{t('usageLoading')}</p>}
-        {errors[id] !== undefined && <p style={{ color: 'var(--dsw-alias-state-error-primary)' }}>
-          {t('usageError', { message: errors[id] })}
+        {!(status === undefined && statusError !== undefined) && <p style={styles.status}>
+          {status === undefined ? t('checking')
+            : configured ? t('externalUsageConnected') : t('externalUsageNotConfigured')}
         </p>}
-        {configured && snapshot?.windows?.length === 0 && <p>{t('usageEmpty')}</p>}
-        {snapshot?.windows?.map((window, index) => {
-          const percent = Math.min(100, Math.max(0, window.usedPercent))
-          const label = window.kind === 'session' ? t('usageSession')
-            : window.kind === 'weekly' ? t('usageWeekly')
-              : window.scope === 'Monthly' ? t('usageMonthly') : window.scope ?? t('usageWindow')
-          return <div key={index} style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <span>{label}</span>
-              <span>{Math.round(percent)}%{window.resetsAt === undefined ? ''
-                : ` · ${t('usageResets', { date: new Date(window.resetsAt).toLocaleString() })}`}</span>
-            </div>
-            <div style={{ height: 6, marginTop: 5, borderRadius: 3, background: 'var(--dsw-alias-bg-layer-1)' }}>
-              <div style={{ width: `${percent}%`, height: '100%', borderRadius: 3, background: barColor(percent) }} />
-            </div>
+        {statusError !== undefined && <p style={styles.error}>
+          {t('externalUsageUnavailable', { message: statusError })}</p>}
+        {status !== undefined && !configured && <p style={styles.status}>{t('externalUsageConfigure', { ref })}</p>}
+        {configured && <div style={styles.account}>
+          <div style={styles.accountHeader}>
+            <span style={styles.defaultStar} title={t('defaultBadge')}>★</span>
+            <span style={styles.accountName}>{t('externalUsageApiKey')}</span>
           </div>
-        })}
+          <div style={styles.usage}>
+            <div style={styles.usageHeader}>
+              <span style={styles.usageTitle}>{t('usageTitle')}</span>
+              {snapshot?.plan !== undefined && <span style={styles.usagePlan}>{t('usagePlan', { plan: snapshot.plan })}</span>}
+              <button type="button" style={styles.usageRefresh} disabled={loading[id] === true}
+                onClick={() => { void refresh(id) }}>{t('usageRefresh')}</button>
+            </div>
+            {loading[id] === true && snapshot === undefined && <p style={styles.status}>{t('usageLoading')}</p>}
+            {errors[id] !== undefined && <p style={styles.error}>{t('usageError', { message: errors[id] })}</p>}
+            {snapshot?.windows?.length === 0 && <p style={styles.status}>{t('usageEmpty')}</p>}
+            {snapshot?.windows?.map((window, index) => {
+              const percent = Math.min(100, Math.max(0, window.usedPercent))
+              const label = window.kind === 'session' ? t('usageSession')
+                : window.kind === 'weekly' ? t('usageWeekly')
+                  : window.scope === 'Monthly' ? t('usageMonthly') : window.scope ?? t('usageWindow')
+              return <div key={index} style={styles.usageRow}>
+                <div style={styles.usageMeta}>
+                  <span>{label}</span>
+                  <span>{Math.round(percent)}%{window.resetsAt === undefined ? ''
+                    : ` · ${t('usageResets', { date: new Date(window.resetsAt).toLocaleString() })}`}</span>
+                </div>
+                <div style={styles.usageTrack}>
+                  <div style={{ ...styles.usageFill, width: `${percent}%`, background: barColor(percent) }} />
+                </div>
+              </div>
+            })}
+          </div>
+        </div>}
+        {!configured && <div style={styles.actions}>
+          <button type="button" style={styles.button} onClick={() => { void refreshStatus() }}>
+            {t('usageRefresh')}
+          </button>
+        </div>}
       </div>
     })}
-  </section>
+  </>
 }
