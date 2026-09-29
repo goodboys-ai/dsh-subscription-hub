@@ -65,3 +65,15 @@ rationale that code, tests, and existing docs do not explain. Docs keep the
 *what* (present-tense reference); notes keep the *why*. When a doc paragraph
 starts explaining a decision's rationale, move it here and link it from the
 doc.
+
+## Lint
+
+`node scripts/verify-agent-notes.mjs` (also a CI job) enforces the shape:
+`{proposed,implemented,rejected}/` lifecycle folders, the closed class set,
+`YYYY-MM-DD-topic.md` filenames, no index files, no legacy `docs/rfc`
+homes, and the required sections — `## Problem` first,
+`## Alternatives considered` always, plus `## Decision`/`## Consequences`
+for implemented notes (`## Proposal`/`## Acceptance criteria`/`## Risks`
+for proposed). Deliberately not linted: bilingual counterparts and frozen
+archives — DSH-scale machinery this repo does not need. Run the script
+before pushing a note.

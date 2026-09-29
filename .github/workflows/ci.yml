@@ -19,6 +19,18 @@ jobs:
           versions=$(grep -v '^#' dsh-versions.txt | grep -v '^[[:space:]]*$' | jq -R . | jq -s -c .)
           echo "dsh=$versions" >> "$GITHUB_OUTPUT"
 
+  notes-lint:
+    # Agent Note structure and required sections (see .agents/notes/AGENTS.md).
+    # A slimmed-down port of deepseek-harness's agent-note gates: no bilingual
+    # pairing, no archive machinery — just the shape and the mandatory sections.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node scripts/verify-agent-notes.mjs
+
   build-and-test:
     # Per-version API checks: compile and test against each DSH version's
     # @deepseek-ai/* APIs, plus the L1 host-export contract. This job never
