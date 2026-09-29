@@ -8,8 +8,8 @@ reported quota in **Settings → Subscriptions**.
 ## What it adds
 
 - **Six subscription model sources:** Connect ChatGPT/Codex, Claude, Grok,
-  GitHub Copilot, Google Antigravity, or Cursor and choose their discovered
-  models in DSH. These routes use account sign-in, without provider API keys.
+  GitHub Copilot, Google Antigravity, or Cursor and choose their models in
+  DSH's picker. These routes use account sign-in, without provider API keys.
 - **Account and model control:** Refresh catalogs and choose visible models.
   For Codex, Claude, Grok, Copilot, and Antigravity, manage multiple accounts
   and same-provider pools. Pools can use available quota to select an account
@@ -35,7 +35,11 @@ layers. With `dsh` available, install the plugin into the web profile:
 dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub
 ```
 
-Git installs run this package's `prepare` script to build the host and browser bundles. If pnpm asks for build-script approval, add this package to the web profile's `pnpm-workspace.yaml` and repeat the command:
+Git installs run this package's `prepare` script to build the host and browser
+bundles. If the install stops with `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`
+(DSH `0.1.7-rc.2` does this by default), add this package to the web
+profile's `pnpm-workspace.yaml` (`~/.dsh/profiles/web/` unless `DSH_HOME` is
+set) and repeat the command:
 
 ```yaml
 allowBuilds:
@@ -44,9 +48,9 @@ allowBuilds:
 
 Restart `dsh web` after installation. Open **Settings → Subscriptions** to
 connect providers, manage accounts and model lists, and inspect available
-quota. The session footer quota pill can be shown or hidden there. OpenCode Go
-and Kimi Code cards show usage when their API keys are configured in
-**Settings → Models**.
+quota. The session footer quota pill can be shown or hidden there for the
+current browser. OpenCode Go and Kimi Code cards show usage when their API
+keys are configured in **Settings → Models**.
 
 To update a GitHub installation, run the same `dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub` command again and restart `dsh web`.
 
@@ -57,7 +61,8 @@ GitHub spec to pin an installation; see the
 
 ## Verification and limits
 
-CI builds, tests, and boots the plugin on both supported DSH versions. Offline
+CI builds, tests, and boots a packed tarball on both supported DSH versions;
+it does not run the GitHub source install's `prepare` step. Offline
 provider tests check recorded API responses, so a passing CI run cannot prove
 that a provider still accepts live sign-in or model requests. See
 [testing](docs/testing.md) for the checks and their limits.
@@ -65,9 +70,9 @@ that a provider still accepts live sign-in or model requests. See
 - **ChatGPT/Codex, Claude, Grok, GitHub Copilot, and Google Antigravity:**
   The port includes the tool-message and icon fixes tracked in
   [upstream issue #117](https://github.com/V1ki/dsh-plugin-subscriptions/issues/117).
-  An isolated `0.1.7-rc.2` web profile served the client bundle and answered
-  auth and usage-status RPCs. Live sign-in and model requests on the supported
-  DSH lines remain to be checked.
+  A manual check in an isolated `0.1.7-rc.2` web profile found the client
+  bundle served and the auth and usage-status RPCs answering. Live sign-in
+  and model requests on the supported DSH lines remain to be checked.
 - **Cursor:** Browser sign-in and live model discovery were verified in an
   isolated `0.1.7-rc.2` profile. A successful live model request remains to be
   verified. Its transport comes from

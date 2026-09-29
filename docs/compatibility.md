@@ -116,13 +116,21 @@ not pre-created.
    only after its gate passes.
 3. **Check live behavior.** Run the [manual canary](testing.md#pre-release-canary-manual--not-a-test-layer)
    from the PR commit in isolated profiles on each supported DSH version.
-   Record provider login, usage, and a model request; check usage-only sources
-   and changed tools too. If live checks remain open, use a plugin prerelease
-   version and state the gaps in its GitHub Release.
+   Check provider login, usage, and a model request, plus usage-only sources
+   and changed tools. Record the date and each result, including checks not
+   run, in the README's [verification section](../README.md#verification-and-limits).
+   If live checks remain open, use a plugin prerelease version and state the
+   gaps in its GitHub Release.
 4. **Check the merge commit.** Merge through a PR and confirm its CI gate.
-   Install GitHub source from the merge commit SHA in an isolated profile at
-   least once: CI boots a packed tarball, while a GitHub source install runs
-   `prepare`. If this fails, fix it through another PR before tagging.
+   CI boots a packed tarball, while a GitHub source install also runs
+   `prepare`. On each supported DSH version, install
+   `github:goodboys-ai/dsh-subscription-hub#<merge-sha>` in an isolated
+   profile and confirm the plugin loads after restart. `scripts/boot-smoke.sh`
+   with `PLUGIN_SOURCE` set to that spec does this unless the DSH version
+   blocks `prepare` (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, currently
+   `0.1.7-rc.2`); there, add the README's `allowBuilds` entry to the profile
+   before installing. If this fails, fix it through another PR before
+   tagging.
 5. **Publish from `main`.** Create `vX.Y.Z` at the checked merge commit and
    publish a GitHub Release with the supported DSH versions, completed live
    checks, known limits, and pinned install command. Mark prerelease versions
@@ -138,5 +146,5 @@ not pre-created.
   tests detect provider-side drift. The manual canary in
   [testing.md](testing.md) checks live behavior before a release.
 - **Forward compatibility.** A new DSH RC can break the plugin; the policy
-  guarantees a *process* (detect → bump → gate → tag), not that `main` works
+  guarantees a *process* (detect → gate → canary → tag), not that `main` works
   on a DSH released yesterday.

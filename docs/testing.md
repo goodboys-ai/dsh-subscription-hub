@@ -162,15 +162,16 @@ drift has no automated coverage by design. The backstop is manual: before
 tagging a release, use an isolated profile on each supported DSH version,
 log in to each subscription provider, read usage where available, and run
 one model request per provider. Also check the usage-only sources and any
-changed provider tools. The README's verification status summarizes live
+changed provider tools. The README's
+[verification section](../README.md#verification-and-limits) records live
 checks and remaining gaps.
 
 ## What "tested" means in the compatibility table
 
 A ✅ in `docs/compatibility.md` means the full gate (L0 + L1 + L2) was green
 on that DSH version. L3 runs in the same `pnpm test` invocation, so it's included.
-Provider canary status is summarized separately in the README verification
-status.
+Provider canary status is recorded separately in the README verification
+section.
 
 ## Credentials policy for tests
 
