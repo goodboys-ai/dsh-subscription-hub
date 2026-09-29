@@ -1,0 +1,67 @@
+# Agent Notes — rules
+
+Decision records for this repo. An Agent Note records a decision that the
+code and docs can't carry on their own: the *why*, what was given up, and
+what would prove it wrong.
+
+## Layout
+
+The path encodes status and kind:
+`{lifecycle}/{class}/YYYY-MM-DD-topic.md`.
+
+**Lifecycle** — the note's status; a note moves folders as it changes:
+
+- `proposed/` — not yet built. `Status: proposed`.
+- `implemented/` — shipped. `Status: implemented`. Kept current with what
+  actually shipped: when the code moves a file, renames a package, or
+  changes a key or default, update the note's facts in the same change
+  (facts only — paths, names, structure — never the decision itself).
+- `rejected/` — considered and declined.
+  `Status: rejected — <why, in one line>`. Keep only while its rationale
+  prevents a tempting, meaningful mistake; otherwise delete it.
+
+**Class** — the kind of decision. Closed set; adding a class requires
+updating this file:
+
+- `provider` — a provider's protocol surface and what we chose to rely on.
+- `architecture` — structural decisions about the shipped source.
+- `process` — tooling, policy, and workflow around the code.
+- `testing` — test infrastructure and strategy.
+
+The filename date is when the topic was first proposed. There is no index
+file — the tree is the index. Cross-references between notes use relative
+markdown links, never bare prose, so they survive moves between folders.
+
+## Format
+
+Every note follows one format:
+
+```markdown
+# Agent Note: <title>
+
+Status: implemented
+
+## Problem
+## Decision
+…bespoke sections…
+## Alternatives considered
+## Consequences
+```
+
+- `## Problem` states the motivation, written to stand without the solution.
+- `## Decision` describes shipped reality in the present tense. (In a
+  `proposed/` note the section is `## Proposal` and may speak in the future
+  tense; it also carries `## Acceptance criteria` and `## Risks`.)
+- `## Alternatives considered` is **mandatory**: each genuine alternative
+  and why it lost, one bold-led paragraph per alternative. A decision
+  recorded without what it beat invites re-litigation — the failure these
+  notes exist to prevent. Alternatives are recorded, never invented.
+- `## Consequences` records what the trade-off cost **and** bought.
+
+## When to write one
+
+Write or update a note in the same PR as the change, and only for lasting
+rationale that code, tests, and existing docs do not explain. Docs keep the
+*what* (present-tense reference); notes keep the *why*. When a doc paragraph
+starts explaining a decision's rationale, move it here and link it from the
+doc.
