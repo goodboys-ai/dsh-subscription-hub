@@ -4,15 +4,11 @@ Status: implemented
 
 ## Problem
 
-Users install one release across the whole DSH support window, so CI must
-verify the artifact users actually install — on every DSH version. The
-original flow did the opposite: each matrix job rewrote dependencies for
-its DSH version and packed its own tarball. That tested N different
-artifacts, none of which was the release. The matrix could go green while
-the shipped tarball was unverified on all but one version — and packaging
-mistakes (a missing file, a `files`-allowlist slip, the cordis patch
-failing on a clean tree) are exactly the class of bug a per-version pack
-cannot see, because every job packed from its own mutated checkout.
+One plugin revision must work across the whole DSH support window. If each
+matrix job rewrites dependencies and packs its own tarball, CI tests a
+different package on each DSH version and cannot establish that one package
+works across the window. The packed layout and cordis patch must also be
+checked on a clean install rather than inferred from a source build.
 
 ## Decision
 
@@ -25,24 +21,19 @@ check against each DSH line — they never pack. There is deliberately no
 per-version artifact.
 
 Why the tarball and not the checkout: a raw-directory install carries
-`node_modules` and never exercises the packed layout. Only the tarball
-tests the production conditions — `@deepseek-ai/*` resolving from the host
-(no `node_modules` shipped), the `files` allowlist (`lib`,
-`vendor/cursor`, `cordis.patch.yml`), and the cordis patch applying to a
-clean tree. `boot-smoke.sh` builds an isolated `DSH_HOME` (a `mktemp` dir,
-never the user's real profiles), installs with `dsh plugin add`, boots
-`dsh web --no-open --port 0`, and asserts the trust handshake (single-use
-`?token=` URL → 303 + session cookie → app page 200), that the served HTML
-references `subscription-hub/client.js` and that the bundle file itself
-serves HTTP 200 with a non-empty body, and that the log shows no cordis
+`node_modules` and never exercises the packed layout. The tarball checks
+`@deepseek-ai/*` resolving from the host (no `node_modules` shipped), the
+`files` allowlist (`lib`, `vendor/cursor`, `cordis.patch.yml`), and the cordis
+patch applying to a clean tree. `boot-smoke.sh` builds an isolated
+`DSH_HOME` (a `mktemp` dir, never the user's real profiles), installs with
+`dsh plugin add`, boots `dsh web --no-open --port 0`, and asserts the trust
+handshake (single-use `?token=` URL → 303 + session cookie → app page 200),
+that the served HTML references `subscription-hub/client.js`, that the
+bundle responds with non-empty JavaScript, and that the log shows no cordis
 patch skips or module-load failures.
 
-The value of testing the real install path was demonstrated, not assumed:
-`boot-smoke` failed in CI while passing locally because the job had no
-pnpm installed and `dsh plugin add` shells out to pnpm. The fix (commit
-`47e05213`) added `pnpm/action-setup` to the job — a reminder that the
-smoke test covers the install's tool dependencies too, which only matters
-because the job performs a genuine install.
+The smoke test also exercises installer dependencies: it caught a missing
+pnpm setup in CI because `dsh plugin add` invokes pnpm (`47e05213`).
 
 ## Alternatives considered
 
@@ -51,7 +42,7 @@ because the job performs a genuine install.
 - **Boot the raw checkout instead of the tarball.** Faster iteration, and
   fine for local development (`boot-smoke.sh` supports it), but it skips
   every packed-layout check that distinguishes a release from a checkout.
-  The release-faithful result requires the tarball.
+  The packed-layout check requires the tarball.
 - **Smoke-test a single DSH version.** Cheaper, but the peer disjunction
   exists to span the window — installing on one version would leave the
   cross-version install claim (the whole point of the disjunction) to the
@@ -59,17 +50,8 @@ because the job performs a genuine install.
 
 ## Consequences
 
-What CI boots is byte-identical to what users install, on every supported
-DSH version, and the peer disjunction is exercised against the real install
-path per version. The costs are structural: the `pack` job is a
-serialization point (boot-smoke waits for it), and a packaging mistake now
-fails every version at once instead of one — which is the desired
-loudness for a defect in the single thing being shipped.
-
-One known limitation, recorded honestly and since closed: the smoke test
-originally asserted only that the served HTML *referenced*
-`subscription-hub/client.js` without requesting the bundle file itself, so
-a bundle that 404d would still pass (flagged in review). `boot-smoke.sh`
-now extracts the bundle's `src` from the served HTML, requests it, and
-requires HTTP 200 with a non-empty body — so the docs' L2 "Catches" claim
-("the client bundle 404s") is accurate.
+Every supported DSH version boots the same tarball bytes, and the peer
+disjunction is exercised through a real plugin install. The `pack` job is
+a dependency of each boot-smoke job; a packaging mistake fails the matrix.
+The README's GitHub install runs `prepare` on the user's machine, so this
+tarball check does not establish byte identity with that install path.

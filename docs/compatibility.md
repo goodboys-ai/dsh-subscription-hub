@@ -39,7 +39,7 @@ and everything was green:
 - `pnpm test` (the full unit + integration suite, including the virtual-provider
   end-to-end tests in `docs/testing.md`)
 - `scripts/boot-smoke.sh` (an isolated web profile boots with the plugin, the
-  cordis patch applies without skips, the client bundle serves)
+  cordis patch applies without skips, the client bundle serves as JavaScript)
 
 Status legend:
 
@@ -66,8 +66,7 @@ work".
 | `0.2.0-rc.1` | ✅ | ✅ | ✅ | ✅ | packed-tarball install verified |
 
 "✅ tested" = build + full suite + L1 + L2 green. L2 installed the packed
-tarball (the release artifact, no `node_modules`) and asserted the served UI
-references `subscription-hub/client.js`.
+tarball (no `node_modules`) and requested the client bundle as JavaScript.
 
 ## Plugin versioning
 

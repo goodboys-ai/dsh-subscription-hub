@@ -92,18 +92,28 @@ done
 echo "ok: web UI serving at $URL"
 
 # 3. The trust handshake works, the UI serves, and the plugin's client
-# bundle is wired in. The printed ?token= URL is single-use: first GET
-# answers 303 and sets a session cookie; the app page (200) then references
-# subscription-hub/client.js, proving the plugin mounted for real.
+# bundle responds as JavaScript. The printed ?token= URL is single-use:
+# first GET answers 303 and sets a session cookie.
 JAR="$SMOKE_HOME/cookies.txt"
 CODE1="$(curl -s -c "$JAR" -o /dev/null -w '%{http_code}' --max-time 15 "$URL" || true)"
 [[ "$CODE1" == "303" ]] || fail "token handshake answered HTTP $CODE1, expected 303"
 APP_HTML="$SMOKE_HOME/app.html"
 CODE="$(curl -s -b "$JAR" -o "$APP_HTML" -w '%{http_code}' --max-time 15 "${URL%%\?*}" || true)"
 [[ "$CODE" == "200" ]] || fail "web UI answered HTTP $CODE, expected 200"
-grep -q "subscription-hub/client.js" "$APP_HTML" \
-  || fail "served UI does not reference the plugin's client bundle"
-echo "ok: web UI serves the app (HTTP 200) with the plugin's client bundle wired in"
+# The 0.1.7 preload combo can start with this plugin, but its bare prefix
+# returns 404. Require the standalone manifest URL with its revision.
+BUNDLE_PATH="$(grep -oE 'plugins/\?\?dsh-subscription-hub/client\.js&rev=[[:alnum:]]+' "$APP_HTML" | head -1 || true)"
+[[ -n "$BUNDLE_PATH" ]] || fail "served UI does not include the plugin's client bundle URL"
+BUNDLE_URL="${URL%%\?*}"
+BUNDLE_URL="${BUNDLE_URL%/}/$BUNDLE_PATH"
+BUNDLE_HEADERS="$SMOKE_HOME/client.headers"
+BUNDLE_FILE="$SMOKE_HOME/client.js"
+BUNDLE_CODE="$(curl -s -b "$JAR" -D "$BUNDLE_HEADERS" -o "$BUNDLE_FILE" -w '%{http_code}' --max-time 15 "$BUNDLE_URL" || true)"
+[[ "$BUNDLE_CODE" == "200" ]] || fail "client bundle answered HTTP $BUNDLE_CODE, expected 200"
+[[ -s "$BUNDLE_FILE" ]] || fail "client bundle response is empty"
+grep -qiE '^content-type:[[:space:]]*[^[:space:]]*javascript' "$BUNDLE_HEADERS" \
+  || fail "client bundle response is not JavaScript"
+echo "ok: web UI and plugin client bundle serve HTTP 200"
 
 # 4. No silent mount failures in the log.
 if grep -qiE "name mismatch|failed to load plugin|plugin failed|Cannot find module|ERR_MODULE_NOT_FOUND" "$WEB_LOG"; then

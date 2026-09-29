@@ -27,7 +27,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, sep } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -101,7 +101,12 @@ if (!existsSync(notesRoot)) {
 
 let count = 0
 for (const entry of readdirSync(notesRoot, { withFileTypes: true })) {
-  if (!entry.isDirectory()) continue
+  if (!entry.isDirectory()) {
+    if (entry.name !== 'AGENTS.md') {
+      fail(`structure: ${entry.name} — only AGENTS.md may live directly under .agents/notes/`)
+    }
+    continue
+  }
   if (!LIFECYCLES.includes(entry.name)) {
     fail(`structure: ${entry.name}/ — unknown lifecycle folder (allowed: ${LIFECYCLES.join(', ')})`)
     continue

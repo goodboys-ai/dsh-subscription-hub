@@ -61,10 +61,10 @@ Status: implemented
 ## When to write one
 
 Write or update a note in the same PR as the change, and only for lasting
-rationale that code, tests, and existing docs do not explain. Docs keep the
-*what* (present-tense reference); notes keep the *why*. When a doc paragraph
-starts explaining a decision's rationale, move it here and link it from the
-doc.
+rationale that code, tests, and existing docs do not explain. Standing docs
+keep current behavior and consequences readers need at the point of use;
+notes own the fuller decision, alternatives, and verification boundary.
+Move durable decision history out of standing docs and link to its note.
 
 ## Lint
 

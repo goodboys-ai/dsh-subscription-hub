@@ -62,10 +62,6 @@ and the compatibility table in `docs/compatibility.md` mirrors it.
   experimenting with an ungated DSH, but it pushes version judgment onto
   every user instead of answering it once in the release. Not a
   distribution strategy.
-- **Omitting the peers or using `*`.** Installs everywhere, breaks at
-  runtime when the host API drifts — the dishonest version of the wide
-  range. Never seriously considered; the L1 host-export check exists
-  precisely because silent host drift is the failure class that matters.
 
 ## Consequences
 

@@ -34,7 +34,7 @@ jobs:
   build-and-test:
     # Per-version API checks: compile and test against each DSH version's
     # @deepseek-ai/* APIs, plus the L1 host-export contract. This job never
-    # packs: the release artifact is built exactly once (see `pack` below)
+    # packs: the CI tarball is built exactly once (see `pack` below)
     # so every DSH version boots the identical tarball.
     needs: versions
     runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ jobs:
           overwrite: true
 
   pack:
-    # Build the single release tarball from the repository's pinned
+    # Build one CI tarball from the repository's pinned
     # dependencies (the window floor). L2 boots this exact tarball on every
     # DSH version — CI must never pack a per-version artifact, because users
     # install one release across the whole support window.
@@ -111,7 +111,7 @@ jobs:
           path: ${{ steps.pack.outputs.tarball }}
 
   boot-smoke:
-    # L2: install the packed tarball (the release artifact: no node_modules,
+    # L2: install the packed tarball (no node_modules,
     # @deepseek-ai/* resolves from the host) and boot it on each DSH version.
     needs: [versions, pack]
     runs-on: ubuntu-latest

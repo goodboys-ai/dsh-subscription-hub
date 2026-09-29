@@ -53,27 +53,29 @@ real profiles), installs this plugin into the `web` profile with
 - the web UI completes its trust handshake: the printed `?token=` URL is
   single-use (first GET → 303 + session cookie), then the app page answers
   HTTP 200 with the cookie;
-- the served app page references `subscription-hub/client.js` — the plugin's
-  client bundle is actually wired into the UI, not just installed;
+- the served app page references `subscription-hub/client.js`, and a request
+  to its versioned URL returns non-empty JavaScript — the client bundle is
+  served, not just listed in the page;
 - the log contains no cordis patch skips (`name mismatch` style silent skips)
   and no module-load failures.
 
-Install the **packed tarball** (`pnpm pack`, the release artifact without
-`node_modules`) rather than the raw checkout when you want the
-release-faithful result: with no `node_modules` shipped, `@deepseek-ai/*`
-must resolve from the host, which is exactly the production condition. (CI
-does this; a raw-dir install is fine for quick iteration.)
+Install the **packed tarball** (`pnpm pack`, without `node_modules`) rather
+than the raw checkout when checking packed layout: `@deepseek-ai/*` must
+resolve from the host. CI does this; a raw-directory install is useful for
+quick iteration. The README's GitHub install builds through `prepare` on
+the user's machine, so CI's tarball smoke does not prove the two installs
+produce identical bytes.
 
 Runs in CI per matrix version, always against the **same** packed tarball:
 CI's `pack` job builds one tarball from the repo's pinned dependencies and
 the `boot-smoke` matrix boots that identical artifact on every DSH version —
-there is deliberately no per-version artifact, because users install one
-release across the whole window. What it deliberately does not assert: RPC
+there is deliberately no per-version artifact. What it does not assert: RPC
 behavior (the `/subscriptions-auth` channel has no stable HTTP form to curl)
 and any provider login — that's L3 (virtual) plus the manual pre-release canary.
 
 Catches: mount-time failures — the plugin installs but doesn't load, the
-client bundle 404s, the patch that registers providers is silently skipped.
+client bundle fails to serve non-empty JavaScript, or the patch that
+registers providers is silently skipped.
 
 ## L3 — Virtual-provider integration tests (have: all six providers)
 
@@ -129,7 +131,7 @@ Catches: regressions in *our* flow logic — broken form encoding, claim-path
 drift in our parsers, mishandled refresh grants, SSE translation bugs. It
 proves the plugin's side of the contract against a faithful fake. The
 strategy, its alternatives, and its honest boundaries are recorded in the
-[virtual-provider fakes](../.agents/notes/implemented/provider/2026-09-29-virtual-provider-fakes.md)
+[virtual-provider fakes](../.agents/notes/implemented/testing/2026-09-29-virtual-provider-fakes.md)
 agent note.
 
 **It does not prove the provider still honors the contract.** A fake can only
