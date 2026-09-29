@@ -5,12 +5,13 @@
 # asserts the mount-time contract:
 #   - the profile boots and the web UI answers HTTP,
 #   - the plugin is registered in the profile,
+#   - the logged-out /subscriptions-auth routes answer,
 #   - the log shows no cordis patch skips ("name mismatch" style silent
 #     skips) and no module-load failures.
 #
-# It deliberately does NOT test RPC behavior (the /subscriptions-auth channel
-# has no stable HTTP form to curl) or any provider login — those are L3
-# (virtual) plus the manual pre-release canary.
+# It deliberately does NOT log in to a provider or call a usage host.
+# Those stay with the virtual-provider specs and the manual pre-release
+# canary.
 #
 # Usage:
 #   DSH_VERSION=0.2.0-rc.1 bash scripts/boot-smoke.sh
@@ -115,7 +116,34 @@ grep -qiE '^content-type:[[:space:]]*[^[:space:]]*javascript' "$BUNDLE_HEADERS" 
   || fail "client bundle response is not JavaScript"
 echo "ok: web UI and plugin client bundle serve HTTP 200"
 
-# 4. No silent mount failures in the log.
+# 4. The mounted RPC routes answer a logged-out profile. The browser posts a
+# client-request envelope to /api/subscriptions-auth.<endpoint>; the same
+# session cookie that fetched the app authorizes it. externalUsage must
+# refuse before any usage host is contacted, because this profile has no keys.
+BASE="${URL%%\?*}"
+BASE="${BASE%/}"
+rpc() {
+  local endpoint="$1"
+  local payload="$2"
+  local expect="$3"
+  local body="$SMOKE_HOME/rpc-${endpoint}.json"
+  local code
+  code="$(curl -s -b "$JAR" -o "$body" -w '%{http_code}' --max-time 15 \
+    -H 'content-type: application/json' \
+    --data-binary "{\"type\":\"client-request\",\"rpcId\":\"smoke-${endpoint}\",\"method\":\"subscriptions-auth.${endpoint}\",\"payload\":${payload}}" \
+    "${BASE}/api/subscriptions-auth.${endpoint}" || true)"
+  [[ "$code" == "200" ]] || fail "subscriptions-auth.${endpoint} answered HTTP ${code}"
+  node "$SCRIPT_DIR/assert-smoke-rpc.mjs" "$body" "$endpoint" "$expect" \
+    || fail "subscriptions-auth.${endpoint} did not match the logged-out contract"
+}
+rpc status '{}' status
+rpc externalStatus '{}' external-status
+rpc cursorStatus '{}' cursor-status
+rpc externalUsage '{"source":"opencode-go"}' external-usage
+rpc externalUsage '{"source":"kimi-code"}' external-usage
+echo "ok: logged-out auth, Cursor, and external-usage RPCs answer"
+
+# 5. No silent mount failures in the log.
 if grep -qiE "name mismatch|failed to load plugin|plugin failed|Cannot find module|ERR_MODULE_NOT_FOUND" "$WEB_LOG"; then
   fail "log shows plugin load/patch failures"
 fi

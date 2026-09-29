@@ -29,8 +29,10 @@ patch applying to a clean tree. `boot-smoke.sh` builds an isolated
 `dsh plugin add`, boots `dsh web --no-open --port 0`, and asserts the trust
 handshake (single-use `?token=` URL → 303 + session cookie → app page 200),
 that the served HTML references `subscription-hub/client.js`, that the
-bundle responds with non-empty JavaScript, and that the log shows no cordis
-patch skips or module-load failures.
+bundle responds with non-empty JavaScript, that the logged-out
+`/api/subscriptions-auth` routes for provider status, external-usage status,
+Cursor status, and unconfigured OpenCode Go / Kimi Code usage answer, and
+that the log shows no cordis patch skips or module-load failures.
 
 The smoke test also exercises installer dependencies: it caught a missing
 pnpm setup in CI because `dsh plugin add` invokes pnpm (`47e05213`).

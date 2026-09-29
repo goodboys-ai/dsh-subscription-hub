@@ -41,7 +41,8 @@ and everything was green:
 - `pnpm test` (the full unit + integration suite, including the virtual-provider
   end-to-end tests in `docs/testing.md`)
 - `scripts/boot-smoke.sh` (an isolated web profile boots with the plugin, the
-  cordis patch applies without skips, the client bundle serves as JavaScript)
+  cordis patch applies without skips, the client bundle serves as JavaScript,
+  and the logged-out auth and external-usage RPCs answer)
 
 Status legend:
 

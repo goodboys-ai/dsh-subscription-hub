@@ -63,6 +63,12 @@ real profiles), installs this plugin into the `web` profile with
 - the served app page references `subscription-hub/client.js`, and a request
   to its versioned URL returns non-empty JavaScript — the client bundle is
   served, not just listed in the page;
+- with that session cookie, POST `/api/subscriptions-auth.status`,
+  `externalStatus`, and `cursorStatus` using the browser `client-request`
+  envelope. A fresh profile reports the five OAuth providers with empty
+  account lists, OpenCode Go and Kimi Code unconfigured, and Cursor
+  unauthenticated. `externalUsage` for each of those two sources returns the
+  unconfigured-key error and does not call the usage host;
 - the log contains no cordis patch skips (`name mismatch` style silent skips)
   and no module-load failures.
 
@@ -76,13 +82,14 @@ produce identical bytes.
 Runs in CI per matrix version, always against the **same** packed tarball:
 CI's `pack` job builds one tarball from the repo's pinned dependencies and
 the `boot-smoke` matrix boots that identical artifact on every DSH version —
-there is deliberately no per-version artifact. What it does not assert: RPC
-behavior (the `/subscriptions-auth` channel has no stable HTTP form to curl)
-and any provider login — that's L3 (virtual) plus the manual pre-release canary.
+there is deliberately no per-version artifact. What it does not assert: a
+provider login, a live usage fetch, or a model request. Those stay with the
+virtual-provider specs and the manual pre-release canary.
 
 Catches: mount-time failures — the plugin installs but doesn't load, the
-client bundle fails to serve non-empty JavaScript, or the patch that
-registers providers is silently skipped.
+client bundle fails to serve non-empty JavaScript, the auth or external-usage
+routes are not registered, or the patch that registers providers is silently
+skipped.
 
 ## L3 — Virtual-provider integration tests (have: all six providers)
 
