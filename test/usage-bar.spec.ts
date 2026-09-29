@@ -4,8 +4,10 @@
  * The usage bar is a single roster: OAuth sessions, the Cursor credential,
  * and the OpenCode Go and Kimi keys are read together, then each account's
  * usage endpoint is called. This file stands all of those up at once and
- * checks the bar text. Copilot is signed in too, and stays off the bar,
- * because the plugin has no Copilot usage fetcher.
+ * checks the bar helpers. It does not start DSH and does not render the
+ * composer. The rendered bar is `scripts/boot-smoke.sh`, which opens a real
+ * `dsh web` with `test/fixtures/usage-bar-profile/`. Copilot is signed in
+ * too, and stays off the bar, because the plugin has no Copilot usage fetcher.
  *
  * The usage URLs below are literals. They are not imported from `src/`, so
  * a renamed production constant that the fetcher no longer calls fails here.

@@ -70,7 +70,19 @@ real profiles), installs this plugin into the `web` profile with
   unauthenticated. `externalUsage` for each of those two sources returns the
   unconfigured-key error and does not call the usage host;
 - the log contains no cordis patch skips (`name mismatch` style silent skips)
-  and no module-load failures.
+  and no module-load failures;
+- after those logged-out checks, the server is stopped,
+  `test/fixtures/usage-bar-profile/` is copied into the temp home, and the
+  web profile boots again. The files hold fake OAuth sessions and fake
+  credential refs, and they are present before that second process starts.
+  `scripts/usage-bar-preload.mjs` answers the usage URLs and refuses every
+  other provider host. A real credential name in the parent environment is
+  unset before launch, and a non-fixture credential is rejected. Headless
+  Chrome opens the web UI, selects the fixture Codex model, and sends one
+  message so the host leaves the hero layout and mounts
+  `conversation.composer.dock`. The usage pill must render, and its dialog
+  must list every fixture account that has a usage window. Copilot is signed
+  in and stays off the bar.
 
 Install the **packed tarball** (`pnpm pack`, without `node_modules`) rather
 than the raw checkout when checking packed layout: `@deepseek-ai/*` must
@@ -83,13 +95,15 @@ Runs in CI per matrix version, always against the **same** packed tarball:
 CI's `pack` job builds one tarball from the repo's pinned dependencies and
 the `boot-smoke` matrix boots that identical artifact on every DSH version —
 there is deliberately no per-version artifact. What it does not assert: a
-provider login, a live usage fetch, or a model request. Those stay with the
-virtual-provider specs and the manual pre-release canary.
+live provider login or a request that reaches a usage host. The composer
+message exists only to mount the dock. Live provider checks stay with the
+manual pre-release canary.
 
 Catches: mount-time failures — the plugin installs but doesn't load, the
 client bundle fails to serve non-empty JavaScript, the auth or external-usage
-routes are not registered, or the patch that registers providers is silently
-skipped.
+routes are not registered, the patch that registers providers is silently
+skipped, or a host UI change stops the usage bar from rendering in the
+composer.
 
 ## L3 — Virtual-provider integration tests (have: all six providers)
 

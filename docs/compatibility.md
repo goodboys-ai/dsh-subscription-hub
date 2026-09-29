@@ -42,7 +42,8 @@ and everything was green:
   end-to-end tests in `docs/testing.md`)
 - `scripts/boot-smoke.sh` (an isolated web profile boots with the plugin, the
   cordis patch applies without skips, the client bundle serves as JavaScript,
-  and the logged-out auth and external-usage RPCs answer)
+  the logged-out auth and external-usage RPCs answer, and the usage bar
+  renders from the fake profile under `test/fixtures/usage-bar-profile/`)
 
 Status legend:
 

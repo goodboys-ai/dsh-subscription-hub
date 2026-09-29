@@ -9,9 +9,11 @@
 #   - the log shows no cordis patch skips ("name mismatch" style silent
 #     skips) and no module-load failures.
 #
-# It deliberately does NOT log in to a provider or call a usage host.
-# Those stay with the virtual-provider specs and the manual pre-release
-# canary.
+# After the logged-out checks it copies test/fixtures/usage-bar-profile
+# into the temp home. Those files are fake credentials, never a real
+# provider login. scripts/usage-bar-preload.mjs answers usage calls and
+# refuses every other provider host. A headless Chrome then opens the web
+# UI and checks that the usage bar rendered.
 #
 # Usage:
 #   DSH_VERSION=0.2.0-rc.1 bash scripts/boot-smoke.sh
@@ -24,6 +26,10 @@
 #   PLUGIN_SOURCE - what `dsh plugin add` installs (default: this repo dir)
 #   DSH_BIN       - dsh binary (default: npx -y @deepseek-ai/dsh@<version>)
 set -euo pipefail
+
+# Inherited process environment wins over $DSH_HOME/.credentials.yaml.
+# Drop these names so a developer shell cannot supply a real key.
+unset OPENCODE_GO_API_KEY KIMI_CODING_API_KEY CURSOR_SUBSCRIPTION_OAUTH || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -76,7 +82,11 @@ if ! $DSH_CLI plugin --profile web list 2>/dev/null | grep -qi "dsh-subscription
 fi
 echo "ok: plugin installed and listed in the web profile"
 
-# 2. Boot the web UI headless on an OS-picked port.
+# 2. Boot the web UI headless on an OS-picked port. The preload is the
+# usage host for this process: fixture JSON for the usage URLs, and a
+# refusal for every other provider host.
+export USAGE_BAR_SEEN="$SMOKE_HOME/usage-seen.jsonl"
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import file://${SCRIPT_DIR}/usage-bar-preload.mjs"
 $DSH_CLI --profile web --no-open --port 0 > "$WEB_LOG" 2>&1 &
 WEB_PID=$!
 
@@ -143,8 +153,41 @@ rpc externalUsage '{"source":"opencode-go"}' external-usage
 rpc externalUsage '{"source":"kimi-code"}' external-usage
 echo "ok: logged-out auth, Cursor, and external-usage RPCs answer"
 
-# 5. No silent mount failures in the log.
-if grep -qiE "name mismatch|failed to load plugin|plugin failed|Cannot find module|ERR_MODULE_NOT_FOUND" "$WEB_LOG"; then
+# 5. Stop that server and boot again with the fixture profile already on
+# disk. The credential provider reads $DSH_HOME/.credentials.yaml at startup,
+# and the auth store is read from auth.json; both have to exist before the
+# process starts. The second boot is the one whose composer the bar check opens.
+kill "$WEB_PID" 2>/dev/null || true
+wait "$WEB_PID" 2>/dev/null || true
+WEB_PID=""
+mkdir -p "$SMOKE_HOME/plugins/subscriptions"
+cp "$REPO_ROOT/test/fixtures/usage-bar-profile/.credentials.yaml" "$SMOKE_HOME/.credentials.yaml"
+cp "$REPO_ROOT/test/fixtures/usage-bar-profile/plugins/subscriptions/auth.json" \
+  "$SMOKE_HOME/plugins/subscriptions/auth.json"
+chmod 600 "$SMOKE_HOME/.credentials.yaml" "$SMOKE_HOME/plugins/subscriptions/auth.json"
+WEB_LOG="$SMOKE_HOME/web-bar.log"
+$DSH_CLI --profile web --no-open --port 0 > "$WEB_LOG" 2>&1 &
+WEB_PID=$!
+URL=""
+for _ in $(seq 1 60); do
+  if ! kill -0 "$WEB_PID" 2>/dev/null; then
+    fail "web UI exited during the fixture boot"
+  fi
+  URL="$(grep -oE 'http://[^[:space:]"'\'']+' "$WEB_LOG" 2>/dev/null | head -1 || true)"
+  if [[ -n "$URL" ]]; then break; fi
+  sleep 2
+done
+[[ -n "$URL" ]] || fail "no serving URL appeared for the fixture boot"
+JAR="$SMOKE_HOME/cookies-bar.txt"
+CODE1="$(curl -s -c "$JAR" -o /dev/null -w '%{http_code}' --max-time 15 "$URL" || true)"
+[[ "$CODE1" == "303" ]] || fail "fixture boot token handshake answered HTTP $CODE1, expected 303"
+BASE="${URL%%\?*}"
+BASE="${BASE%/}"
+node "$SCRIPT_DIR/assert-usage-bar-ui.mjs" "$BASE" "$JAR" "$USAGE_BAR_SEEN" \
+  || fail "usage bar was not rendered"
+
+# 6. No silent mount failures in the log.
+if grep -qiE "name mismatch|failed to load plugin|plugin failed|Cannot find module|ERR_MODULE_NOT_FOUND" "$SMOKE_HOME/web.log" "$WEB_LOG"; then
   fail "log shows plugin load/patch failures"
 fi
 echo "ok: no patch skips or module-load failures in the log"
