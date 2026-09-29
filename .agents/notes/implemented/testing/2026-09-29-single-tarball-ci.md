@@ -33,7 +33,8 @@ clean tree. `boot-smoke.sh` builds an isolated `DSH_HOME` (a `mktemp` dir,
 never the user's real profiles), installs with `dsh plugin add`, boots
 `dsh web --no-open --port 0`, and asserts the trust handshake (single-use
 `?token=` URL → 303 + session cookie → app page 200), that the served HTML
-references `subscription-hub/client.js`, and that the log shows no cordis
+references `subscription-hub/client.js` and that the bundle file itself
+serves HTTP 200 with a non-empty body, and that the log shows no cordis
 patch skips or module-load failures.
 
 The value of testing the real install path was demonstrated, not assumed:
@@ -65,8 +66,10 @@ serialization point (boot-smoke waits for it), and a packaging mistake now
 fails every version at once instead of one — which is the desired
 loudness for a defect in the single thing being shipped.
 
-One known limitation, recorded honestly: the smoke test asserts the served
-HTML *references* `subscription-hub/client.js` but never requests the
-bundle file itself, so a bundle that 404s would still pass (flagged in
-review; not yet fixed). The docs' L2 "Catches" list overclaims here —
-"the client bundle 404s" is not currently caught.
+One known limitation, recorded honestly and since closed: the smoke test
+originally asserted only that the served HTML *referenced*
+`subscription-hub/client.js` without requesting the bundle file itself, so
+a bundle that 404d would still pass (flagged in review). `boot-smoke.sh`
+now extracts the bundle's `src` from the served HTML, requests it, and
+requires HTTP 200 with a non-empty body — so the docs' L2 "Catches" claim
+("the client bundle 404s") is accurate.
