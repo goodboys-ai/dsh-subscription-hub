@@ -13,7 +13,10 @@ A single DeepSeek Harness plugin for subscription-backed models and usage querie
 
 ## Install from GitHub
 
-The tested DSH version is `0.1.7-rc.2`. With `dsh` available, install the plugin into the web profile:
+The tested DSH versions are `0.1.7-rc.2` and `0.2.0-rc.1` (peer range
+`>=0.1.7-rc.2 <0.3.0`). See [docs/compatibility.md](docs/compatibility.md)
+for the support window and [docs/testing.md](docs/testing.md) for the test
+layers. With `dsh` available, install the plugin into the web profile:
 
 ```sh
 dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub
@@ -53,6 +56,11 @@ pnpm install --frozen-lockfile
 pnpm build
 pnpm test
 ```
+
+Test layers (unit, host-export contract, boot smoke, virtual-provider
+integration) are documented in [docs/testing.md](docs/testing.md); the DSH
+support window and release process in
+[docs/compatibility.md](docs/compatibility.md).
 
 The package is private to prevent npm publication; GitHub source installation is supported. The `cordis.patch.yml` bundle entry and browser module ID use this project's package name, `dsh-subscription-hub`.
 

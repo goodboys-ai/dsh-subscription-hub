@@ -1,0 +1,10 @@
+# Supported DeepSeek Harness versions.
+#
+# Sliding window: the newest RC of each of the latest three DSH minor lines
+# (only 0.1.x and 0.2.x exist so far — see docs/compatibility.md).
+# This file is the single source of truth for:
+#   - the CI matrix (.github/workflows/ci.yml reads it)
+#   - the compatibility table (docs/compatibility.md)
+# Add the new version at the bottom, drop the oldest when the window exceeds three.
+0.1.7-rc.2
+0.2.0-rc.1
