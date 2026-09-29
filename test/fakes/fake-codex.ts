@@ -1,5 +1,5 @@
 /**
- * Virtual Codex provider for integration tests (L3, see docs/testing.md).
+ * Virtual Codex provider for integration tests (see docs/testing.md).
  *
  * This is a fetch-level router that simulates the ChatGPT backend's HTTP
  * surface so the *real* plugin code — OAuthFlowManager, exchangeCodexCode,

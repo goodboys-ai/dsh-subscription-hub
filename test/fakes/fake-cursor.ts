@@ -1,5 +1,5 @@
 /**
- * Virtual Cursor provider for integration tests (L3, see docs/testing.md).
+ * Virtual Cursor provider for integration tests (see docs/testing.md).
  *
  * Fetch-level router simulating Cursor's HTTP surface so the *real* plugin
  * code — CursorAuth (browser-login poll + refresh), fetchCursorUsage,

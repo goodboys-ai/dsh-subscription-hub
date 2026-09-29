@@ -16,7 +16,7 @@ CI packs **exactly one tarball**, from the repository's pinned dependencies
 (the window floor), in the `pack` job. The `boot-smoke` and `host-e2e`
 matrices download that same tarball artifact and boot it on every DSH
 version in `dsh-versions.txt`. The per-version `build-and-test` jobs only swap
-`devDependencies` to run the build, the test suite, and the L1 host-export
+`devDependencies` to run the build, the test suite, and the host-export
 check against each DSH line — they never pack. There is deliberately no
 per-version artifact.
 

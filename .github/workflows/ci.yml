@@ -33,9 +33,9 @@ jobs:
 
   build-and-test:
     # Per-version API checks: compile and test against each DSH version's
-    # @deepseek-ai/* APIs, plus the L1 host-export contract. This job never
-    # packs: the CI tarball is built exactly once (see `pack` below)
-    # so every DSH version boots the identical tarball.
+    # @deepseek-ai/* APIs, plus the host-export and host contract checks.
+    # This job never packs: the CI tarball is built exactly once (see `pack`
+    # below) so every DSH version boots the identical tarball.
     needs: versions
     runs-on: ubuntu-latest
     strategy:
@@ -73,11 +73,11 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm build
       - run: pnpm test
-      - name: L1 host-export contract check
+      - name: Host-export check
         env:
           DSH_VERSION: ${{ matrix.dsh }}
         run: node scripts/check-host-exports.mjs --dsh "$DSH_VERSION"
-      - name: L1 runtime host contract check
+      - name: Host contract check
         # Icons, slot outlets, DOM markers, services, theme tokens, and the
         # shell's module table from src/client/host-contract.ts; tsc cannot
         # see any of these.
@@ -91,10 +91,10 @@ jobs:
           overwrite: true
 
   pack:
-    # Build one CI tarball from the repository's pinned
-    # dependencies (the window floor). L2 boots this exact tarball on every
-    # DSH version — CI must never pack a per-version artifact, because users
-    # install one release across the whole support window.
+    # Build one CI tarball from the repository's pinned dependencies (the
+    # window floor). The boot smoke and host E2E boot this exact tarball on
+    # every DSH version — CI must never pack a per-version artifact, because
+    # users install one release across the whole support window.
     runs-on: ubuntu-latest
     outputs:
       tarball: ${{ steps.pack.outputs.tarball }}
@@ -120,7 +120,7 @@ jobs:
           path: ${{ steps.pack.outputs.tarball }}
 
   boot-smoke:
-    # L2: install the packed tarball (no node_modules,
+    # Boot smoke: install the packed tarball (no node_modules,
     # @deepseek-ai/* resolves from the host) and boot it on each DSH version.
     needs: [versions, pack]
     runs-on: ubuntu-latest
@@ -140,7 +140,7 @@ jobs:
         with:
           name: plugin-tarball
           path: ${{ runner.temp }}/tarball
-      - name: L2 boot smoke test
+      - name: Boot smoke test
         env:
           DSH_VERSION: ${{ matrix.dsh }}
         run: |

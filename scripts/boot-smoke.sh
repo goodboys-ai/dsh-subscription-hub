@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# L2 boot smoke test (see docs/testing.md).
+# Boot smoke test (see docs/testing.md).
 #
 # Boots a real DeepSeek Harness web profile with this plugin installed and
 # asserts the mount-time contract:

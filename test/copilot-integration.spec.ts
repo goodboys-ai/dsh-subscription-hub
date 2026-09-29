@@ -1,5 +1,5 @@
 /**
- * L3 virtual-provider integration test: Copilot (see docs/testing.md).
+ * Virtual-provider integration test: Copilot (see docs/testing.md).
  *
  * The whole Copilot route runs against {@link installFakeCopilot}'s virtual
  * backend — no credentials, no browser, no network. What is REAL in every

@@ -1,5 +1,5 @@
 /**
- * Virtual Antigravity provider for integration tests (L3, see docs/testing.md).
+ * Virtual Antigravity provider for integration tests (see docs/testing.md).
  *
  * Fetch-level router simulating Google's OAuth + the Cloud Code Companion
  * API surface so the *real* plugin code — OAuthFlowManager,

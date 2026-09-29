@@ -40,16 +40,16 @@ and everything was green:
 - `pnpm build` (TypeScript compiles against that version's `@deepseek-ai/*` APIs)
 - `pnpm test` (the full unit + integration suite, including the virtual-provider
   end-to-end tests in `docs/testing.md`)
-- `scripts/check-host-exports.mjs` (L1: `src/` type-checks against that
+- `scripts/check-host-exports.mjs` (`src/` type-checks against that
   version's published declarations)
-- `scripts/check-host-contract.mjs` (L1: every runtime host name listed in
+- `scripts/check-host-contract.mjs` (every runtime host name listed in
   `src/client/host-contract.ts` — icons, slots, services, DOM markers, theme
   tokens, crash diagnostics, and the shell's module table — appears in that
   version's shipped code)
-- `scripts/boot-smoke.sh` (L2: an isolated web profile boots with the plugin,
+- `scripts/boot-smoke.sh` (an isolated web profile boots with the plugin,
   the cordis patch applies without skips, the client bundle serves as
   JavaScript, and the logged-out auth and external-usage RPCs answer)
-- `scripts/host-e2e.sh` (L4: with the fake profile under
+- `scripts/host-e2e.sh` (with the fake profile under
   `test/fixtures/host-e2e-profile/`, the usage RPCs return every fixture
   value, the model picker lists the plugin's Codex model, one message streams
   through the plugin into the transcript, the usage pill renders in the
@@ -59,8 +59,8 @@ and everything was green:
 
 Status legend:
 
-- ✅ **tested** — the full gate (build, full test suite, both L1 checks, L2
-  boot smoke, L4 host E2E) was green on this combination.
+- ✅ **tested** — the full gate (build, full test suite, host-export and
+  host contract checks, boot smoke, host E2E) was green on this combination.
 - ⚠️ **untested** — inside the window but the gate hasn't run it yet
   (typically a brand-new RC, less than a few days old).
 - ❌ **known-broken** — the gate is red or a specific incompatibility is
@@ -76,13 +76,13 @@ results below are from local runs on 2026-09-29; the CI matrix runs the
 identical gates on every push. A cell becomes ✅ only from a green gate run,
 never from "it should work".
 
-| DSH | build | tests | L1 exports | L1 host contract | L2 boot smoke | L4 host E2E | Notes |
-|-----|-------|-------|------------|------------------|---------------|-------------|-------|
+| DSH | build | tests | host exports | host contract | boot smoke | host E2E | Notes |
+|-----|-------|-------|--------------|---------------|------------|----------|-------|
 | `0.1.7-rc.2` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | window floor; devDeps pin here |
 | `0.2.0-rc.1` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | packed-tarball install verified |
 
-L2 and L4 installed the packed tarball (no `node_modules`). L4 used the
-host's default workspace on both versions, without the directory picker.
+The boot smoke and host E2E installed the packed tarball (no
+`node_modules`). The host E2E used the host's default workspace on both versions, without the directory picker.
 
 ## Plugin versioning
 
@@ -124,8 +124,8 @@ not pre-created.
    lockfile to the new floor when the old floor leaves. There is no
    release-watch job; check DSH releases manually until one is added.
 2. **Run the gate.** Require the PR's `CI gate`: per-version build, tests,
-   L1 host-export and host contract checks, plus L2 boot smoke and L4 host
-   E2E of one packed tarball on every listed DSH version. A host E2E
+   host-export and host contract checks, plus the boot smoke and host E2E
+   of one packed tarball on every listed DSH version. A host E2E
    failure uploads `host-e2e-evidence-<version>` (screenshot, DOM, console,
    server log); read it before rerunning. If a version fails, fix the plugin
    or narrow the window and peers in the PR. Record a new ✅ in the
@@ -167,5 +167,5 @@ not pre-created.
 - **Forward compatibility.** A new DSH RC can break the plugin; the policy
   guarantees a *process* (detect → gate → canary → tag), not that `main` works
   on a DSH released yesterday. The nightly `next-host` job shortens the
-  detect step: it runs the L1, L2, and L4 checks against the newest
-  published DSH and opens an issue when one of them finds a break.
+  detect step: it runs the host-export and host contract checks, the boot
+  smoke, and the host E2E against the newest published DSH and opens an issue when one of them finds a break.

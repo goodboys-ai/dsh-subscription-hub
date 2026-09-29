@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * L1 host-export contract check.
+ * Host-export check.
  *
  * Verifies that this plugin's `src/` type-checks against a given DSH
  * version's `@deepseek-ai/*` type declarations — without booting anything.

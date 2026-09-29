@@ -1,5 +1,5 @@
 /**
- * Virtual Grok provider for integration tests (L3, see docs/testing.md).
+ * Virtual Grok provider for integration tests (see docs/testing.md).
  *
  * Fetch-level router simulating xAI's HTTP surface so the *real* plugin
  * code — grokDiscovery, grokFlow, exchangeGrokCode, refreshGrok,

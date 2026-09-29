@@ -2,28 +2,29 @@
 
 The plugin is only ever used inside a DSH host, so most of what can break it
 sits on the boundary between the two: host exports, slot outlets, DOM
-markers, RPC routes, and the model adapter the host calls. The layers below
-check that boundary from the cheapest place that can see each failure.
+markers, RPC routes, and the model adapter the host calls. The checks below
+cover that boundary from the cheapest place that can see each failure.
 Mocked unit tests prove our logic; they cannot prove the providers still
-behave the way we recorded, and no automated layer here calls a real
+behave the way we recorded, and no automated check here calls a real
 provider. That gap belongs to the manual pre-release canary.
 
-| Layer | Command | Runs | Checks |
+| Check | Command | Runs | Proves |
 |-------|---------|------|--------|
-| L0 unit + L3 virtual providers | `pnpm test` | CI, every version | plugin logic, provider wire contracts against fakes |
-| L1 host exports | `node scripts/check-host-exports.mjs --dsh <v>` | CI, every version | `src/` compiles against that version's declarations |
-| L1 host contract | `node scripts/check-host-contract.mjs --dsh <v>` | CI, every version | runtime host names in `src/client/host-contract.ts` exist in that version's shipped code |
-| L2 boot smoke | `bash scripts/boot-smoke.sh` | CI, every version | the packed tarball installs, mounts, serves, and answers logged-out RPCs |
-| L4 host E2E | `bash scripts/host-e2e.sh` | CI, every version | the plugin works inside a signed-in `dsh web`, driven through Chrome |
+| Unit and integration tests | `pnpm test` | CI, every version | plugin logic, provider wire contracts against fakes |
+| Host-export check | `node scripts/check-host-exports.mjs --dsh <v>` | CI, every version | `src/` compiles against that version's declarations |
+| Host contract check | `node scripts/check-host-contract.mjs --dsh <v>` | CI, every version | runtime host names in `src/client/host-contract.ts` exist in that version's shipped code |
+| Boot smoke test | `bash scripts/boot-smoke.sh` | CI, every version | the packed tarball installs, mounts, serves, and answers logged-out RPCs |
+| Host end-to-end test (host E2E) | `bash scripts/host-e2e.sh` | CI, every version | the plugin works inside a signed-in `dsh web`, driven through Chrome |
 | Nightly | `.github/workflows/nightly.yml` | schedule | mutation score, shuffled order, newest published DSH |
 | Canary | manual | before a release | real providers |
 
-L0 and L3 share one command: `pnpm test` compiles `test/` and runs every
-spec, including the virtual-provider integration specs. L3 is a coverage
-category, not a separate lane. The other layers install and boot a real DSH,
-so they are separate commands.
+Unit and integration tests share one command: `pnpm test` compiles `test/`
+and runs every spec, including the virtual-provider integration specs.
+Integration is a coverage category, not a separate lane. The other checks
+install a DSH version's packages, and the smoke and end-to-end tests also
+boot a real DSH, so they are separate commands.
 
-## L0 — Unit tests
+## Unit tests
 
 All specs in `test/` cover the adapter logic: OAuth URL construction, PKCE,
 token storage and refresh, usage-window classification, model-list filtering
@@ -77,7 +78,7 @@ translators. Each file states the invariant it checks. A failing run prints
 the seed and the shrunk counterexample; turn that counterexample into an
 ordinary example test next to the fix.
 
-## L1 — Host-export check
+## Host-export check
 
 `node scripts/check-host-exports.mjs --dsh <version>` / `--all`
 
@@ -93,19 +94,7 @@ Catches: a host that renamed or removed a typed export, which would stop the
 whole plugin tree from loading. The TypeScript build catches this only for
 the pinned version.
 
-The L1 checks, the boot smoke, and the host E2E share one exit-code
-meaning, so the nightly job can open issues only for real breaks. Exit 1 is
-a finding about the plugin on that DSH version, and only an explicitly
-recognised one: a compiler diagnostic in a source file, a missing contract
-name or host package, the host refusing the plugin's peers, or a failed
-assertion. Exit 2 is everything else, because it means the check did not
-run: npm or the registry, a file it could not read or write, a failed
-download or temp dir, a `dsh plugin add` failure without a peer refusal,
-Chrome, or the host UI harness. An unexpected exception therefore exits 2,
-and a finding the scripts do not yet recognise surfaces as a job failure
-without an issue rather than as a false break.
-
-## L1 — Host contract check
+## Host contract check
 
 `node scripts/check-host-contract.mjs --dsh <version>` / `--all` (run
 `pnpm build` first)
@@ -144,7 +133,7 @@ Two pieces keep the manifest honest:
   name shows in the browser console and in the host E2E instead of as an
   empty icon.
 
-## L2 — Boot smoke test
+## Boot smoke test
 
 `DSH_VERSION=<v> bash scripts/boot-smoke.sh`
 
@@ -197,7 +186,7 @@ Catches: the plugin installs but does not load, the client bundle is not
 served, the auth or external-usage routes are not registered, or the patch
 that registers providers is silently skipped.
 
-## L3 — Virtual-provider integration tests
+## Integration tests with virtual providers
 
 `test/fakes/*.ts` + `test/*-integration.spec.ts`. Every provider route has
 one: Codex, Claude, Grok, GitHub Copilot, Google Antigravity, Cursor.
@@ -266,7 +255,7 @@ replay what we recorded. When the provider changes, these tests stay green
 and the plugin breaks in production. That gap is handled by the manual
 canary, not by more fakes.
 
-## L4 — Host E2E
+## Host end-to-end test (host E2E)
 
 `DSH_VERSION=<v> bash scripts/host-e2e.sh` (needs Chrome or Chromium; set
 `CHROME_BIN` when it is not on `PATH` as `google-chrome` or `chromium`)
@@ -352,7 +341,22 @@ making without a planned fixture.
 
 It does not prove: live provider behavior, Cursor generation (raw HTTP/2,
 refused here), or UI paths other than the ones above. Login flows are covered
-by L3 against fakes and by the canary against real providers.
+by the integration tests against fakes and by the canary against real
+providers.
+
+## Exit codes
+
+The host-export check, the host contract check, the boot smoke, and the
+host E2E share one exit-code meaning, so the nightly job can open issues
+only for real breaks. Exit 1 is a finding about the plugin on that DSH
+version, and only an explicitly recognised one: a compiler diagnostic in a
+source file, a missing contract name or host package, the host refusing the
+plugin's peers, or a failed assertion. Exit 2 is everything else, because
+it means the check did not run: npm or the registry, a file it could not
+read or write, a failed download or temp dir, a `dsh plugin add` failure
+without a peer refusal, Chrome, or the host UI harness. An unexpected
+exception therefore exits 2, and a finding the scripts do not yet recognise
+surfaces as a job failure without an issue rather than as a false break.
 
 ## Nightly
 
@@ -375,7 +379,7 @@ by L3 against fakes and by the canary against real providers.
   contract check, boot smoke, and host E2E, each even when an earlier one
   failed, and opens or updates a tracking issue that names the checks that
   found a break (exit 1). A setup failure (the build, Chrome) or a check
-  that could not run (exit 2, see [L1](#l1--host-export-check)) fails the
+  that could not run (exit 2, see [Exit codes](#exit-codes)) fails the
   job without an issue. The nightly tarball's peers admit the candidate,
   so a peer refusal there (exit 1) means the host changed how it checks
   peers, which is itself a break.
@@ -418,7 +422,8 @@ checks and remaining gaps.
 ## What "tested" means in the compatibility table
 
 A ✅ in `docs/compatibility.md` means the CI gate was green on that DSH
-version: build, `pnpm test`, both L1 checks, L2 boot smoke, and L4 host E2E.
+version: build, `pnpm test`, the host-export and host contract checks, the
+boot smoke, and the host E2E.
 Provider canary status is recorded separately in the README verification
 section.
 
@@ -428,14 +433,14 @@ No test, at any layer, in CI or locally, uses real provider credentials.
 The unit suite and the host E2E also cannot reach a production provider
 server: `pnpm test` refuses non-loopback connections, and the host E2E
 answers provider URLs from fixtures and refuses the rest, in the server and
-in Chrome. L3 and the host E2E use fake JWTs and fake tokens by
-construction.
+in Chrome. The integration tests and the host E2E use fake JWTs and fake
+tokens by construction.
 
 Two gaps remain. The guards stop connections, not name lookups, so a
 refused hostname may still reach DNS. The boot smoke runs without a guard:
 its profile is logged out, so the plugin has no provider to call, but a
 regression that made an outbound request anyway would not fail it (see
-L2).
+[Boot smoke test](#boot-smoke-test)).
 
 The manual pre-release canary is the only thing that ever touches a real
 account, and it is done by the maintainer, in an isolated profile. If a test

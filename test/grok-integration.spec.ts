@@ -1,5 +1,5 @@
 /**
- * L3 virtual-provider integration test: Grok (see docs/testing.md).
+ * Virtual-provider integration test: Grok (see docs/testing.md).
  *
  * The whole Grok route runs against {@link installFakeGrok}'s virtual
  * backend — no credentials, no browser, no network. What is REAL in every

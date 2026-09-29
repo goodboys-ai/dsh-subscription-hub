@@ -1,5 +1,5 @@
 /**
- * Virtual Copilot provider for integration tests (L3, see docs/testing.md).
+ * Virtual Copilot provider for integration tests (see docs/testing.md).
  *
  * Fetch-level router simulating GitHub's HTTP surface so the *real* plugin
  * code — DeviceFlowManager, copilotDeviceFlow, completeCopilotLogin,

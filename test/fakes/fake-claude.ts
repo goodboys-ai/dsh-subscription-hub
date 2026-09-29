@@ -1,5 +1,5 @@
 /**
- * Virtual Claude provider for integration tests (L3, see docs/testing.md).
+ * Virtual Claude provider for integration tests (see docs/testing.md).
  *
  * Fetch-level router simulating Anthropic's HTTP surface so the *real*
  * plugin code — OAuthFlowManager, claudeFlow, exchangeClaudeCode,

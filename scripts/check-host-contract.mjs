@@ -3,7 +3,7 @@
  * Host contract check: every runtime assumption in src/client/host-contract.ts
  * against one DSH version's published packages.
  *
- * check-host-exports.mjs (L1) proves src/ type-checks against a version's
+ * check-host-exports.mjs proves src/ type-checks against a version's
  * declarations. That misses what the client reads at runtime, like icon
  * names, slot outlets, DOM markers, cordis services, theme tokens, and the
  * shell's module table. A host that drops one of those still compiles

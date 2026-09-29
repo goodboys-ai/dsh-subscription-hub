@@ -99,8 +99,8 @@ Specific choices inside the E2E:
 
 The boot smoke keeps only the logged-out checks and needs no browser.
 
-The L1 checks, the boot smoke, and the host E2E exit 1 only for a finding
-they explicitly recognise (a compiler diagnostic, a missing contract name
+The host-export and host contract checks, the boot smoke, and the host E2E
+exit 1 only for a finding they explicitly recognise (a compiler diagnostic, a missing contract name
 or host package, the host refusing the plugin's peers, a failed assertion)
 and exit 2 for everything else, including unexpected exceptions. The
 nightly job opens an issue only for exit 1. The other default was tried
@@ -154,4 +154,4 @@ every client change that reads a new host name must update, and a harness
 that follows host UI changes (onboarding labels, the model menu). A harness
 break shows as exit 2 with a screenshot, and is fixed in the driver, not the
 plugin. The E2E covers one provider's generation path (Codex) and the usage
-bar; other providers' generation stays with L3 and the canary.
+bar; other providers' generation stays with the integration tests and the canary.

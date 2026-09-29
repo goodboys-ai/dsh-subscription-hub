@@ -175,7 +175,7 @@ jobs:
       # Every check exits 1 for a finding about the plugin on this DSH and 2
       # when it could not run (npm, Chrome, the host UI harness). Each step
       # records its code, so only a finding opens the tracking issue.
-      - name: L1 host-export contract check
+      - name: Host-export check
         id: exports
         if: steps.pack.outcome == 'success'
         continue-on-error: true
@@ -195,7 +195,7 @@ jobs:
           code=$?
           echo "code=$code" >> "$GITHUB_OUTPUT"
           exit "$code"
-      - name: L2 boot smoke test
+      - name: Boot smoke test
         id: boot
         if: steps.pack.outcome == 'success'
         continue-on-error: true
@@ -238,7 +238,7 @@ jobs:
               *) setup="$setup $name($result)" ;;
             esac
           }
-          sort_check L1-host-exports "$EXPORTS"
+          sort_check host-exports "$EXPORTS"
           sort_check host-contract "$CONTRACT"
           sort_check boot-smoke "$BOOT"
           sort_check host-e2e "$E2E"
