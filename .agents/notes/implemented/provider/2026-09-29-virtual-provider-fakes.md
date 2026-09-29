@@ -82,7 +82,7 @@ And the standing caveat, repeated because it is the whole point of the
 layering: the suite proves *our* side of the contract against a faithful
 fake. It cannot prove the provider still honors the contract — a fake can
 only replay what was recorded. Provider-side drift is the manual canary's
-job ([drop-L4 note](../testing/2026-09-29-drop-l4.md)).
+provider's job (see `docs/testing.md`).
 
 ## Alternatives considered
 
@@ -94,8 +94,7 @@ job ([drop-L4 note](../testing/2026-09-29-drop-l4.md)).
   rather than the provider's HTTP surface, so the test asserts the mock,
   not the flow. The fetch-level router keeps the assertion at the wire,
   where the provider contract actually lives. Rejected.
-- **Real-API tests in CI.** Same rejection as in the
-  [drop-L4 note](../testing/2026-09-29-drop-l4.md): six third-party
+- **Real-API tests in CI.** Rejected: six third-party
   consumer OAuth flows, no credentials in automation, production untouched
   by principle.
 

@@ -144,10 +144,7 @@ drift has no automated coverage by design. The backstop is manual: before
 tagging a release, log in once per provider in an isolated profile and run
 one model request — exactly the "use it to know" step. The README's
 migration-status notes record which providers have had a live canary on the
-current DSH line. (An automated drift monitor was built and then removed;
-the rationale is in the
-[drop-L4](../.agents/notes/implemented/testing/2026-09-29-drop-l4.md) agent
-note.)
+current DSH line. (An automated drift monitor was built and then removed.)
 
 ## What "tested" means in the compatibility table
 
