@@ -50,6 +50,8 @@ if (result?.ok !== true) {
 
 const value = result.value
 if (expect === 'status') {
+  // Independent of PROVIDER_IDS in src/auth/store.ts. A new provider id
+  // must be added here or the logged-out status check fails.
   const ids = ['codex', 'claude', 'grok', 'copilot', 'antigravity']
   const providers = value?.providers ?? {}
   const got = Object.keys(providers).sort().join(',')
