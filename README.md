@@ -57,6 +57,9 @@ pnpm build
 pnpm test
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR workflow, test boundaries,
+and isolated DSH checks.
+
 Test layers (unit, host-export contract, boot smoke, virtual-provider
 integration) are documented in [docs/testing.md](docs/testing.md); the DSH
 support window and release process in
