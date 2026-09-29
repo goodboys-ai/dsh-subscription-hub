@@ -1,6 +1,6 @@
 # Documentation standard
 
-Follow the [repository prose standard](../AGENTS.md). Write new
+Follow the [prose standard](../.agents/skills/subscription-hub-prose-standard/SKILL.md). Write new
 project-authored docs in English. Preserve existing Chinese and bilingual
 material when maintaining it; the upstream README snapshots are source copies.
 

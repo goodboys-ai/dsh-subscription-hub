@@ -3,6 +3,8 @@
 Decision records for this repo. An Agent Note records a decision that the
 code and docs can't carry on their own: the *why*, what was given up, and
 what would prove it wrong.
+Follow the [prose standard](../skills/subscription-hub-prose-standard/SKILL.md)
+for what to preserve while editing a note.
 
 ## Layout
 
