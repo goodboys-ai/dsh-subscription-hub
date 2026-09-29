@@ -19,10 +19,22 @@ jobs:
           versions=$(grep -v '^#' dsh-versions.txt | grep -v '^[[:space:]]*$' | jq -R . | jq -s -c .)
           echo "dsh=$versions" >> "$GITHUB_OUTPUT"
 
+  notes-lint:
+    # Agent Note structure and required sections (see .agents/notes/AGENTS.md).
+    # A slimmed-down port of deepseek-harness's agent-note gates: no bilingual
+    # pairing, no archive machinery — just the shape and the mandatory sections.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node scripts/verify-agent-notes.mjs
+
   build-and-test:
     # Per-version API checks: compile and test against each DSH version's
     # @deepseek-ai/* APIs, plus the L1 host-export contract. This job never
-    # packs: the release artifact is built exactly once (see `pack` below)
+    # packs: the CI tarball is built exactly once (see `pack` below)
     # so every DSH version boots the identical tarball.
     needs: versions
     runs-on: ubuntu-latest
@@ -70,7 +82,7 @@ jobs:
           overwrite: true
 
   pack:
-    # Build the single release tarball from the repository's pinned
+    # Build one CI tarball from the repository's pinned
     # dependencies (the window floor). L2 boots this exact tarball on every
     # DSH version — CI must never pack a per-version artifact, because users
     # install one release across the whole support window.
@@ -99,7 +111,7 @@ jobs:
           path: ${{ steps.pack.outputs.tarball }}
 
   boot-smoke:
-    # L2: install the packed tarball (the release artifact: no node_modules,
+    # L2: install the packed tarball (no node_modules,
     # @deepseek-ai/* resolves from the host) and boot it on each DSH version.
     needs: [versions, pack]
     runs-on: ubuntu-latest
@@ -137,7 +149,7 @@ jobs:
     # when GitHub reports a skipped dependent job as successful.
     name: CI gate
     if: ${{ always() }}
-    needs: [versions, pack, build-and-test, boot-smoke]
+    needs: [versions, pack, build-and-test, boot-smoke, notes-lint]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -150,9 +162,10 @@ jobs:
           PACK_RESULT: ${{ needs.pack.result }}
           BUILD_RESULT: ${{ needs.build-and-test.result }}
           BOOT_RESULT: ${{ needs.boot-smoke.result }}
+          NOTES_RESULT: ${{ needs.notes-lint.result }}
         run: |
           failed=0
-          for result in "$VERSIONS_RESULT" "$PACK_RESULT" "$BUILD_RESULT" "$BOOT_RESULT"; do
+          for result in "$VERSIONS_RESULT" "$PACK_RESULT" "$BUILD_RESULT" "$BOOT_RESULT" "$NOTES_RESULT"; do
             [[ "$result" == success ]] || failed=1
           done
           mapfile -t versions < <(grep -Ev '^#|^[[:space:]]*$' dsh-versions.txt)

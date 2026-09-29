@@ -14,27 +14,21 @@ exist so far (`0.1.x`, `0.2.x`), so the window currently holds two versions.
 `dsh-versions.txt` at the repo root is the single source of truth for the
 window; the CI matrix and the table below derive from it.
 
-How one release covers the whole window: the `@deepseek-ai/*`
-`peerDependencies` are **an exact-version disjunction**, not a range
-(currently `0.1.7-rc.2 || 0.2.0-rc.1`) — a deliberate choice: a range like
-`>=0.1.7-rc.2 <0.3.0` would also admit future versions such as `0.2.1-rc.1`
-that the gate has never seen, promising more than we have verified. A new
-disjunct is appended only after the full gate goes green on that DSH
-version, so the disjunction always lists exactly the gated versions. DSH's
-plugin manager enforces peer versions at install time, but it accepts
-disjunctions — verified: with exact `0.1.7-rc.2` peers, installing on
-`0.2.0-rc.1` is *rejected* (unless the user grants an explicit
-`dsh plugin allow-version` exemption); with the disjunction, the same plugin
-installs cleanly on both `0.1.7-rc.2` and `0.2.0-rc.1`, and the packed
-tarball (which ships no `node_modules` — `files` is
-`lib`, `vendor/cursor`, `cordis.patch.yml`) resolves `@deepseek-ai/*` from
-the host at runtime. The `devDependencies` stay pinned exact at the window
+One release covers the whole window: the `@deepseek-ai/*`
+`peerDependencies` are **an exact-version disjunction** listing exactly the
+gated versions (currently `0.1.7-rc.2 || 0.2.0-rc.1`). A disjunct is appended
+only after the full gate goes green on that DSH version, and removed when
+the window drops it. The `devDependencies` stay pinned exact at the window
 floor, so the build never uses APIs newer than the oldest supported DSH.
 CI packs exactly one tarball from those pinned dependencies and boots that
 same tarball on every DSH version in the window — there is no per-version
 artifact. When the window gains a version, the disjunction gains a disjunct;
 when it drops one, the disjunct is removed — that, not a per-version release
 line, is the maintenance event.
+
+The rationale lives in agent notes:
+[exact-version peer disjunction](../.agents/notes/implemented/process/2026-09-29-exact-peer-disjunction.md)
+and [single-tarball CI](../.agents/notes/implemented/testing/2026-09-29-single-tarball-ci.md).
 
 ## What "supported" means
 
@@ -45,7 +39,7 @@ and everything was green:
 - `pnpm test` (the full unit + integration suite, including the virtual-provider
   end-to-end tests in `docs/testing.md`)
 - `scripts/boot-smoke.sh` (an isolated web profile boots with the plugin, the
-  cordis patch applies without skips, the client bundle serves)
+  cordis patch applies without skips, the client bundle serves as JavaScript)
 
 Status legend:
 
@@ -72,8 +66,7 @@ work".
 | `0.2.0-rc.1` | ✅ | ✅ | ✅ | ✅ | packed-tarball install verified |
 
 "✅ tested" = build + full suite + L1 + L2 green. L2 installed the packed
-tarball (the release artifact, no `node_modules`) and asserted the served UI
-references `subscription-hub/client.js`.
+tarball (no `node_modules`) and requested the client bundle as JavaScript.
 
 ## Plugin versioning
 
