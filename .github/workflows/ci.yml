@@ -75,6 +75,11 @@ jobs:
       - run: pnpm test
       - name: L1 host-export contract check
         run: node scripts/check-host-exports.mjs --dsh ${{ matrix.dsh }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pass-build-${{ matrix.dsh }}
+          path: dsh-versions.txt
+          overwrite: true
 
   pack:
     # Build the single release tarball from the repository's pinned
@@ -132,3 +137,49 @@ jobs:
         run: |
           TARBALL="$(ls "${{ runner.temp }}/tarball"/*.tgz | head -1)"
           PLUGIN_SOURCE="$TARBALL" bash scripts/boot-smoke.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pass-boot-${{ matrix.dsh }}
+          path: dsh-versions.txt
+          overwrite: true
+
+  ci-gate:
+    # Stable required check for branch protection. A successful matrix job
+    # uploads a version-named marker; missing markers keep this gate red even
+    # when GitHub reports a skipped dependent job as successful.
+    name: CI gate
+    if: ${{ always() }}
+    needs: [versions, pack, build-and-test, boot-smoke, notes-lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/ci-artifacts
+      - name: Verify every version passed
+        env:
+          VERSIONS_RESULT: ${{ needs.versions.result }}
+          PACK_RESULT: ${{ needs.pack.result }}
+          BUILD_RESULT: ${{ needs.build-and-test.result }}
+          BOOT_RESULT: ${{ needs.boot-smoke.result }}
+          NOTES_RESULT: ${{ needs.notes-lint.result }}
+        run: |
+          failed=0
+          for result in "$VERSIONS_RESULT" "$PACK_RESULT" "$BUILD_RESULT" "$BOOT_RESULT" "$NOTES_RESULT"; do
+            [[ "$result" == success ]] || failed=1
+          done
+          mapfile -t versions < <(grep -Ev '^#|^[[:space:]]*$' dsh-versions.txt)
+          if ((${#versions[@]} == 0)); then
+            echo 'No supported DSH versions were listed' >&2
+            exit 1
+          fi
+          for version in "${versions[@]}"; do
+            for job in build boot; do
+              marker="$RUNNER_TEMP/ci-artifacts/pass-$job-$version/dsh-versions.txt"
+              if [[ ! -f "$marker" ]]; then
+                echo "Missing successful $job check for DSH $version" >&2
+                failed=1
+              fi
+            done
+          done
+          exit "$failed"
