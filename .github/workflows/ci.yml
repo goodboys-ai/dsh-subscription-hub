@@ -8,8 +8,70 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
+  versions:
     runs-on: ubuntu-latest
+    outputs:
+      dsh: ${{ steps.read.outputs.dsh }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        run: |
+          versions=$(grep -v '^#' dsh-versions.txt | grep -v '^[[:space:]]*$' | jq -R . | jq -s -c .)
+          echo "dsh=$versions" >> "$GITHUB_OUTPUT"
+
+  build-and-test:
+    # Per-version API checks: compile and test against each DSH version's
+    # @deepseek-ai/* APIs, plus the L1 host-export contract. This job never
+    # packs: the release artifact is built exactly once (see `pack` below)
+    # so every DSH version boots the identical tarball.
+    needs: versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dsh: ${{ fromJson(needs.versions.outputs.dsh) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Pin @deepseek-ai/* devDependencies to DSH ${{ matrix.dsh }}
+        env:
+          DSH_VERSION: ${{ matrix.dsh }}
+        run: |
+          node -e "
+            const fs = require('fs')
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+            const version = process.env.DSH_VERSION
+            // Only the build inputs move: peerDependencies are the shipped
+            // exact-version disjunction and must stay identical in every
+            // job, since one packed tarball serves the whole window.
+            // cordis and schemastery are versioned independently of DSH.
+            const isDshPrerelease = (v) => /^\\d+\\.\\d+\\.\\d+-(alpha|beta|rc)(\\.|$)/.test(String(v).replace(/^[~^]/, ''))
+            for (const [name, current] of Object.entries(pkg.devDependencies ?? {})) {
+              if (name.startsWith('@deepseek-ai/') && isDshPrerelease(current)) pkg.devDependencies[name] = version
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')
+          "
+          grep '"@deepseek-ai/dsh-llm"' package.json
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - name: L1 host-export contract check
+        run: node scripts/check-host-exports.mjs --dsh ${{ matrix.dsh }}
+
+  pack:
+    # Build the single release tarball from the repository's pinned
+    # dependencies (the window floor). L2 boots this exact tarball on every
+    # DSH version — CI must never pack a per-version artifact, because users
+    # install one release across the whole support window.
+    runs-on: ubuntu-latest
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -21,4 +83,37 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm test
+      - id: pack
+        run: |
+          # pnpm prints the full path of the tarball as its last line.
+          TARBALL="$(pnpm pack --pack-destination "$RUNNER_TEMP" | tail -1)"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-tarball
+          path: ${{ steps.pack.outputs.tarball }}
+
+  boot-smoke:
+    # L2: install the packed tarball (the release artifact: no node_modules,
+    # @deepseek-ai/* resolves from the host) and boot it on each DSH version.
+    needs: [versions, pack]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dsh: ${{ fromJson(needs.versions.outputs.dsh) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-tarball
+          path: ${{ runner.temp }}/tarball
+      - name: L2 boot smoke test
+        env:
+          DSH_VERSION: ${{ matrix.dsh }}
+        run: |
+          TARBALL="$(ls "${{ runner.temp }}/tarball"/*.tgz | head -1)"
+          PLUGIN_SOURCE="$TARBALL" bash scripts/boot-smoke.sh
