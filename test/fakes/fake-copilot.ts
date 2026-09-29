@@ -25,6 +25,14 @@
  * two-step token exchange, wire selection, SSE translation). What it cannot
  * prove: that GitHub still honors the contract — that is the manual
  * pre-release canary.
+ *
+ * Provenance:
+ * Source: the VS Code Copilot Chat client identity (shared with pi-mono and
+ * copilot2api-go), GitHub's device flow and copilot_internal token exchange,
+ * and the editor-version feed, mirrored in src/providers/copilot.ts.
+ * Shapes as of: 1891a32 (2026-09-28). Not compared with the live provider
+ * since; update this line when a canary run confirms or corrects them.
+ * Drift signal: the manual pre-release canary's login plus one model request.
  */
 import type { TestContext } from 'node:test'
 /**

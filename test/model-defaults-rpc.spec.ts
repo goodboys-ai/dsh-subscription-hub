@@ -6,7 +6,7 @@
  * DSH_HOME is redirected to a temp dir so the store file never leaks.
  */
 
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -20,6 +20,8 @@ import { CodexAdapter } from '../src/providers/codex.js'
 const clearCodexCatalog = CodexAdapter.prototype.clearAccountCatalog
 
 const HOME = mkdtempSync(join(tmpdir(), 'model-defaults-rpc-test-'))
+// Suite-level hook: the mkdtemp is top-level, so there is no test context to hang t.after on.
+after(() => { rmSync(HOME, { recursive: true, force: true }) })
 
 const plugin = await import('../src/index.js')
 const { modelDefaultsFilePath, resetModelDefaultsForTests } = await import('../src/model-defaults.js')

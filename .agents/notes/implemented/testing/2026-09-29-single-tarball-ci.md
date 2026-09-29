@@ -13,9 +13,9 @@ checked on a clean install rather than inferred from a source build.
 ## Decision
 
 CI packs **exactly one tarball**, from the repository's pinned dependencies
-(the window floor), in the `pack` job. The `boot-smoke` matrix downloads
-that same tarball artifact and boots it on every DSH version in
-`dsh-versions.txt`. The per-version `build-and-test` jobs only swap
+(the window floor), in the `pack` job. The `boot-smoke` and `host-e2e`
+matrices download that same tarball artifact and boot it on every DSH
+version in `dsh-versions.txt`. The per-version `build-and-test` jobs only swap
 `devDependencies` to run the build, the test suite, and the L1 host-export
 check against each DSH line — they never pack. There is deliberately no
 per-version artifact.
@@ -32,7 +32,9 @@ that the served HTML references `subscription-hub/client.js`, that the
 bundle responds with non-empty JavaScript, that the logged-out
 `/api/subscriptions-auth` routes for provider status, external-usage status,
 Cursor status, and unconfigured OpenCode Go / Kimi Code usage answer, and
-that the log shows no cordis patch skips or module-load failures.
+that the log shows no cordis patch skips or module-load failures. The host
+E2E installs the same tarball into a signed-in profile; see
+[host contract and host E2E](2026-09-29-host-contract-and-e2e.md).
 
 The smoke test also exercises installer dependencies: it caught a missing
 pnpm setup in CI because `dsh plugin add` invokes pnpm (`47e05213`).
@@ -54,6 +56,7 @@ pnpm setup in CI because `dsh plugin add` invokes pnpm (`47e05213`).
 
 Every supported DSH version boots the same tarball bytes, and the peer
 disjunction is exercised through a real plugin install. The `pack` job is
-a dependency of each boot-smoke job; a packaging mistake fails the matrix.
+a dependency of each boot-smoke and host-e2e job; a packaging mistake fails
+the matrix.
 The README's GitHub install runs `prepare` on the user's machine, so this
 tarball check does not establish byte identity with that install path.

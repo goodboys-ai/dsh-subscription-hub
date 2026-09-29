@@ -6,6 +6,9 @@
 //   node scripts/assert-smoke-rpc.mjs <file> <endpoint> <expect>
 //
 // expect: status | external-status | cursor-status | external-usage
+//
+// Exit 1 when the body breaks the logged-out contract, and 2 when the check
+// could not run (bad arguments, or the saved body could not be read).
 import { readFileSync } from 'node:fs'
 
 const [file, endpoint, expect] = process.argv.slice(2)
@@ -15,13 +18,25 @@ function fail(message) {
   process.exit(1)
 }
 
-if (file === undefined || endpoint === undefined || expect === undefined) {
-  fail('usage: assert-smoke-rpc.mjs <file> <endpoint> <expect>')
+function setupFail(message) {
+  console.error(`SMOKE SETUP FAILURE: ${message}`)
+  process.exit(2)
 }
 
+const EXPECTATIONS = ['status', 'external-status', 'cursor-status', 'external-usage']
+if (file === undefined || endpoint === undefined || !EXPECTATIONS.includes(expect)) {
+  setupFail(`usage: assert-smoke-rpc.mjs <file> <endpoint> <${EXPECTATIONS.join(' | ')}>`)
+}
+
+let text
+try {
+  text = readFileSync(file, 'utf8')
+} catch (error) {
+  setupFail(`cannot read the saved subscriptions-auth.${endpoint} body: ${error.message}`)
+}
 let body
 try {
-  body = JSON.parse(readFileSync(file, 'utf8'))
+  body = JSON.parse(text)
 } catch {
   fail(`subscriptions-auth.${endpoint} body is not JSON`)
 }
@@ -72,6 +87,4 @@ if (expect === 'status') {
   if (value?.authenticated !== false) {
     fail(`cursorStatus was ${JSON.stringify(value)}`)
   }
-} else {
-  fail(`unknown expectation ${expect}`)
 }

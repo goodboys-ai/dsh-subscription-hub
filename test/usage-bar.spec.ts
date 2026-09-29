@@ -5,22 +5,27 @@
  * and the OpenCode Go and Kimi keys are read together, then each account's
  * usage endpoint is called. This file stands all of those up at once and
  * checks the bar helpers. It does not start DSH and does not render the
- * composer. The rendered bar is `scripts/boot-smoke.sh`, which opens a real
- * `dsh web` with `test/fixtures/usage-bar-profile/`. Copilot is signed in
+ * composer. The rendered bar is `scripts/host-e2e.sh`, which opens a real
+ * `dsh web` with `test/fixtures/host-e2e-profile/`. Copilot is signed in
  * too, and stays off the bar, because the plugin has no Copilot usage fetcher.
  *
  * The usage URLs below are literals. They are not imported from `src/`, so
  * a renamed production constant that the fetcher no longer calls fails here.
  */
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { mock, test } from 'node:test'
+import { after, mock, test } from 'node:test'
+import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
+import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
 import type { ProviderId } from '../src/auth/store.js'
-import type { BadgeProvider, ProviderUsageDisplay } from '../src/client/SubscriptionUsageBadge.js'
+import type { UsageWindow } from '../src/client/SubscriptionsSection.js'
 
-process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'dsh-usage-bar-'))
+const home = mkdtempSync(join(tmpdir(), 'dsh-usage-bar-'))
+// Suite-level hook: the mkdtemp is top-level, so there is no test context to hang t.after on.
+after(() => { rmSync(home, { recursive: true, force: true }) })
+process.env.DSH_HOME = home
 
 const FAR = Date.now() + 24 * 60 * 60_000
 
@@ -100,29 +105,30 @@ test('every signed-in usage account shows up in the bar', async (t) => {
   const { Context } = await import('@deepseek-ai/cordis')
   const { createFakeConnection } = await import('./fake-connection.js')
   const ctx = new Context()
+  // Disposal must be armed before the first assertion that can throw below:
+  // the plugin mounts ref'd timers (the Claude keychain sync interval in
+  // src/index.ts), and an undisposed Context keeps the event loop alive, so
+  // `node --test` would hang until the CI timeout instead of reporting the
+  // failure.
+  t.after(() => ctx.fiber.dispose())
   const fake = createFakeConnection()
-  ctx.provide('llm', {
-    registerAdapter() {
-      return { replace() { /* the bar never calls the model */ } }
-    },
-  } as never)
+  // The bar never calls the model; rpc.spec.ts mounts the same way.
+  ctx.provide('llm', { registerAdapter: () => Object.assign(() => {}, { replace: () => {} }) })
   ctx.provide('connection', fake.connection)
-  ctx.provide('credentials', {
-    resolve: async (ref: string) => {
-      if (ref === 'OPENCODE_GO_API_KEY') return { value: 'go-secret' }
-      if (ref === 'KIMI_CODING_API_KEY') return { value: 'kimi-secret' }
-      if (ref === 'CURSOR_SUBSCRIPTION_OAUTH') {
-        return { value: cursorCredential() }
-      }
+  const credentials: Pick<CredentialProvider, 'resolve'> = {
+    resolve: async (ref) => {
+      if (ref === 'OPENCODE_GO_API_KEY') return { value: 'go-secret', source: 'file' }
+      if (ref === 'KIMI_CODING_API_KEY') return { value: 'kimi-secret', source: 'file' }
+      if (ref === 'CURSOR_SUBSCRIPTION_OAUTH') return { value: cursorCredential(), source: 'file' }
       return undefined
     },
-  } as never)
+  }
+  ctx.provide('credentials', credentials as CredentialProvider)
   ctx.plugin(plugin, {
     providers: ['codex', 'claude', 'grok', 'copilot', 'antigravity'] satisfies ProviderId[],
   })
   await new Promise((resolve) => { setTimeout(resolve, 50) })
   assert.ok(fake.registered(), 'the subscriptions-auth routes were registered')
-  t.after(() => ctx.fiber.dispose())
 
   // The badge module imports host UI primitives that pull browser-only
   // packages. This test only uses the roster and pill helpers.
@@ -150,6 +156,7 @@ test('every signed-in usage account shows up in the bar', async (t) => {
     collapsedDisplays,
     compactSegment,
     expandedDisplays,
+    groupUsageDisplays,
     loadBadgeRoster,
     usageOf,
   } = await import('../src/client/SubscriptionUsageBadge.js')
@@ -157,8 +164,8 @@ test('every signed-in usage account shows up in the bar', async (t) => {
     call: async (_channel: string, method: string, payload: unknown) => (
       fake.handler(method.replace(/^subscriptions-auth\./, ''), payload, new AbortController().signal)
     ),
-  }
-  const { roster, refreshed } = await loadBadgeRoster(rpc as never)
+  } satisfies Pick<ClientConnectionRpc, 'call'> as ClientConnectionRpc
+  const { roster, refreshed } = await loadBadgeRoster(rpc)
   assert.deepEqual([...refreshed].sort(), [
     'antigravity',
     'claude',
@@ -180,22 +187,17 @@ test('every signed-in usage account shows up in the bar', async (t) => {
     'kimi-coding',
   ])
 
-  const displays: ProviderUsageDisplay[] = []
+  // The component's poll: each account's usage, keyed as the badge keys it,
+  // then the badge's own grouping into provider rows.
+  const windowsOf = new Map<string, UsageWindow[]>()
+  const plans = new Map<string, string>()
   for (const entry of roster) {
-    const usage = await usageOf(rpc as never, entry)
-    if (!usage.supported || usage.windows === undefined || usage.windows.length === 0) continue
-    displays.push({
-      provider: entry.provider,
-      name: BAR_NAMES[entry.provider],
-      accounts: [{
-        key: entry.account.key,
-        isDefault: entry.account.isDefault,
-        windows: usage.windows,
-        ...(entry.account.account === undefined ? {} : { account: entry.account.account }),
-        ...(usage.plan === undefined ? {} : { plan: usage.plan }),
-      }],
-    })
+    const usage = await usageOf(rpc, entry)
+    const key = `${entry.provider}:${entry.account.key}`
+    if (usage.plan !== undefined) plans.set(key, usage.plan)
+    if (usage.supported && usage.windows !== undefined && usage.windows.length > 0) windowsOf.set(key, usage.windows)
   }
+  const displays = groupUsageDisplays(roster, windowsOf, plans)
 
   assert.deepEqual(displays.map((row) => row.provider), [
     'codex',
@@ -254,18 +256,6 @@ test('every signed-in usage account shows up in the bar', async (t) => {
   assert.equal(seen.some((call) => call.url.startsWith(CURSOR_SUMMARY_URL)), true)
   assert.equal(seen.some((call) => call.url.includes('githubcopilot.com')), false)
 })
-
-/** Labels the badge prints. Kept here so the pill assertion is the bar text. */
-const BAR_NAMES: Record<BadgeProvider, string> = {
-  codex: 'Codex',
-  claude: 'Claude',
-  grok: 'Grok',
-  copilot: 'Copilot',
-  antigravity: 'Antigravity',
-  'cursor-subscription': 'Cursor',
-  'opencode-go': 'OpenCode Go',
-  'kimi-coding': 'Kimi Code',
-}
 
 /** Cursor's credential is a JWT whose `sub` is the dashboard user id. */
 function cursorCredential(): string {

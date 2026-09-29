@@ -10,7 +10,10 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LlmError } from '@deepseek-ai/dsh-llm'
+import type { LlmRuntime, ModelModality } from '@deepseek-ai/dsh-llm'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { codexProfileClaims } from '../src/providers/codex.js'
 import type { FetchFn } from '../src/providers/common.js'
 import { AccountTokenManager } from '../src/providers/accounts.js'
@@ -35,6 +38,9 @@ import {
   parseVideoStartResponse,
   parseVideoStatusResponse,
 } from '../src/tools/video-generate.js'
+
+/** The tool output renderer's JSON value (dsh-util-values; not a direct dependency here). */
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
 /** Mint an unsigned JWT carrying the given payload. */
 function unsignedJwt(payload: Record<string, unknown>): string {
@@ -243,8 +249,9 @@ test('sniffImageMediaType: png, jpeg, webp, and the png default', () => {
   assert.equal(sniffImageMediaType(Buffer.from([1, 2, 3])), 'image/png')
 })
 
-test('image_generate: grok fallback when codex is logged out', async () => {
+test('image_generate: grok fallback when codex is logged out', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'router-images-'))
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2])
   const requests: { url: string; body: unknown }[] = []
   const fetchFn: FetchFn = ((url: string, init?: RequestInit) => {
@@ -343,8 +350,9 @@ test('image_generate excludes disabled providers from preferred and fallback rou
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('image_generate execute: writes files, error status, and logged-out', async () => {
+test('image_generate execute: writes files, error status, and logged-out', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'subscriptions-images-'))
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
   const png = Buffer.from([1, 2, 3])
   const { fetchFn, lastBody } = jsonFetch({ created: 1, data: [{ b64_json: png.toString('base64') }] })
   const tool = createImageGenerateTool({ codexTokens: memoryTokens(codexSession), fetchFn, imagesDir: dir })
@@ -389,14 +397,14 @@ test('image_generate presentCall', () => {
 })
 
 /** Fake attachment store: saveImage returns a deterministic ref. */
-function fakeAttachments() {
+function fakeAttachments(): { store: Pick<AttachmentStore, 'saveImage'>; saved: { name?: string }[] } {
   const saved: { name?: string }[] = []
   const store = {
     saveImage: (input: { data: Uint8Array; mediaType: string; name?: string }) => {
       saved.push({ ...input.name === undefined ? {} : { name: input.name } })
       return Promise.resolve({
-        attachmentId: 'att-1',
-        mediaType: 'image/png',
+        attachmentId: AttachmentId('att-1'),
+        mediaType: 'image/png' as const,
         bytes: input.data.length,
         width: 2,
         height: 3,
@@ -420,7 +428,7 @@ function routedExec(provider: string, model: string, extra: Record<string, unkno
 }
 
 /** Fake llm service whose resolveModelInfo reports the given modalities. */
-function fakeLlm(inputModalities: string[] | undefined) {
+function fakeLlm(inputModalities: ModelModality[] | undefined): Pick<LlmRuntime, 'resolveModelInfo'> {
   return {
     resolveModelInfo: () => Promise.resolve({
       provider: 'codex',
@@ -433,16 +441,17 @@ function fakeLlm(inputModalities: string[] | undefined) {
 
 const PNG_BYTES = Buffer.from([1, 2, 3])
 
-test('image_generate: image-capable route commits attachments and returns image refs', async () => {
+test('image_generate: image-capable route commits attachments and returns image refs', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'router-images-'))
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
   const { store, saved } = fakeAttachments()
   const { fetchFn } = jsonFetch({ created: 1, data: [{ b64_json: PNG_BYTES.toString('base64') }] })
   const tool = createImageGenerateTool({
     codexTokens: memoryTokens(codexSession),
     fetchFn,
     imagesDir: dir,
-    resolveAttachments: () => store as never,
-    resolveLlm: () => fakeLlm(['text', 'image']) as never,
+    resolveAttachments: () => store as AttachmentStore,
+    resolveLlm: () => fakeLlm(['text', 'image']) as LlmRuntime,
   })
   const value = await tool.execute(
     { prompt: 'a square' },
@@ -454,16 +463,17 @@ test('image_generate: image-capable route commits attachments and returns image 
   assert.equal(value.images?.[0].mediaType, 'image/png')
 })
 
-test('image_generate: text-only route degrades to text without saving attachments', async () => {
+test('image_generate: text-only route degrades to text without saving attachments', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'router-images-'))
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
   const { store, saved } = fakeAttachments()
   const { fetchFn } = jsonFetch({ created: 1, data: [{ b64_json: PNG_BYTES.toString('base64') }] })
   const tool = createImageGenerateTool({
     codexTokens: memoryTokens(codexSession),
     fetchFn,
     imagesDir: dir,
-    resolveAttachments: () => store as never,
-    resolveLlm: () => fakeLlm(['text']) as never,
+    resolveAttachments: () => store as AttachmentStore,
+    resolveLlm: () => fakeLlm(['text']) as LlmRuntime,
   })
   const value = await tool.execute(
     { prompt: 'a square' },
@@ -478,7 +488,7 @@ test('image_generate: text-only route degrades to text without saving attachment
     codexTokens: memoryTokens(codexSession),
     fetchFn,
     imagesDir: dir,
-    resolveAttachments: () => store as never,
+    resolveAttachments: () => store as AttachmentStore,
     resolveLlm: () => undefined,
   })
   const degraded = await noLlm.execute({ prompt: 'a square' }, routedExec('codex', 'gpt-5.6-sol')) as { images?: unknown[] }
@@ -490,14 +500,14 @@ test('image_generate render: image blocks when value.images present, text-only o
   const withImages = tool.output.render({ prompt: 'p' }, {
     paths: ['/tmp/a.png'],
     images: [{ attachmentId: 'att-1', mediaType: 'image/png', bytes: 3, width: 2, height: 3, name: 'a.png' }],
-  } as never)
+  } satisfies JsonValue)
   assert.equal(withImages.length, 2)
   assert.equal(withImages[0].type, 'text')
   assert.deepEqual(withImages[1], {
     type: 'image',
     attachment: { attachmentId: 'att-1', mediaType: 'image/png', bytes: 3, width: 2, height: 3, name: 'a.png' },
   })
-  const textOnly = tool.output.render({ prompt: 'p' }, { paths: ['/tmp/a.png'] } as never)
+  const textOnly = tool.output.render({ prompt: 'p' }, { paths: ['/tmp/a.png'] } satisfies JsonValue)
   assert.equal(textOnly.length, 1)
   assert.equal(textOnly[0].type, 'text')
 })
@@ -565,8 +575,9 @@ test('parseVideoStartResponse / parseVideoStatusResponse', () => {
   assert.throws(() => parseVideoStatusResponse({ status: 'weird' }), /unexpected status/)
 })
 
-test('video_generate execute: submit, poll to done, download and save', async () => {
+test('video_generate execute: submit, poll to done, download and save', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'subscriptions-videos-'))
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
   const mp4 = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70])
   const { fetchFn, requests } = sequenceFetch([
     new Response(JSON.stringify({ request_id: 'req-1' }), { status: 200 }),
@@ -607,8 +618,9 @@ test('video_generate execute: submit, poll to done, download and save', async ()
   assert.equal(requests[3].url, 'https://vidgen.x.ai/v.mp4')
 })
 
-test('video_generate execute: failed status, poll timeout, error status, logged-out', async () => {
+test('video_generate execute: failed status, poll timeout, error status, logged-out', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'subscriptions-videos-'))
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
   const failed = createVideoGenerateTool({
     tokens: memoryTokens(grokSession),
     fetchFn: sequenceFetch([
@@ -663,7 +675,7 @@ test('video_generate presentCall and render', () => {
     path: '/tmp/v.mp4',
     url: 'https://vidgen.x.ai/v.mp4',
     duration: 8,
-  } as never)
+  } satisfies JsonValue)
   assert.equal(rendered.length, 1)
   assert.equal(rendered[0].type, 'text')
   assert.match((rendered[0] as { text: string }).text, /Saved video to \/tmp\/v\.mp4 \(8s\)/)
@@ -671,20 +683,21 @@ test('video_generate presentCall and render', () => {
     path: '/tmp/v.mp4',
     url: 'https://vidgen.x.ai/v.mp4',
     duration: 8,
-  } as never)
+  } satisfies JsonValue)
   assert.deepEqual(meta, { fileName: 'v.mp4', duration: 8 })
 })
 
-test('image_generate: nested dispatch defers no context (code mode injects image results itself)', async () => {
+test('image_generate: nested dispatch defers no context (code mode injects image results itself)', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'router-images-'))
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
   const { store } = fakeAttachments()
   const { fetchFn } = jsonFetch({ created: 1, data: [{ b64_json: PNG_BYTES.toString('base64') }] })
   const tool = createImageGenerateTool({
     codexTokens: memoryTokens(codexSession),
     fetchFn,
     imagesDir: dir,
-    resolveAttachments: () => store as never,
-    resolveLlm: () => fakeLlm(['text', 'image']) as never,
+    resolveAttachments: () => store as AttachmentStore,
+    resolveLlm: () => fakeLlm(['text', 'image']) as LlmRuntime,
   })
   const deferred: { content: { type: string }[] }[] = []
   const exec = routedExec('codex', 'gpt-5.6-sol', {
@@ -699,11 +712,11 @@ test('image_generate: nested dispatch defers no context (code mode injects image
 })
 
 /** Editing uses stored bytes, preserving source order and the canonical output contract. */
-function editFixture() {
-  const ref = { attachmentId: `sha256:${'a'.repeat(64)}`, mediaType: 'image/png' as const, bytes: 3, width: 1, height: 1 }
+function editFixture(): { ref: ImageAttachmentRef; reads: string[]; store: Pick<AttachmentStore, 'imageLimits' | 'readImage' | 'saveImage'> } {
+  const ref: ImageAttachmentRef = { attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`), mediaType: 'image/png' as const, bytes: 3, width: 1, height: 1 }
   const reads: string[] = []
   const store = {
-    imageLimits: { maxImagesPerMessage: 5, maxImageBytes: 100, maxMessageImageBytes: 500 },
+    imageLimits: { maxImagesPerMessage: 5, maxImageBytes: 100, maxMessageImageBytes: 500, maxImagePixels: 1000, maxImageDimension: 100, mediaTypes: ['image/png'] as const },
     readImage: async (input: typeof ref, signal: AbortSignal) => {
       signal.throwIfAborted()
       reads.push(input.attachmentId)
@@ -724,8 +737,8 @@ for (const provider of ['gpt', 'grok'] as const) {
         const references = Array.from({ length: count }, (_, i) => ({ ...ref, attachmentId: `sha256:${String.fromCharCode(97 + i).repeat(64)}`, originalDimensions: { width: 2, height: 2 } }))
         const wire = sequenceFetch(Array.from({ length: 2 }, () => new Response(JSON.stringify({ data: [{ b64_json: 'b25l' }] }))))
         const tool = createImageGenerateTool({ codexTokens: memoryTokens(codexSession), grokTokens: memoryTokens(grokSession),
-          fetchFn: wire.fetchFn, imagesDir: dir, resolveAttachments: () => store as never,
-          resolveLlm: () => fakeLlm(['text', 'image']) as never })
+          fetchFn: wire.fetchFn, imagesDir: dir, resolveAttachments: () => store as AttachmentStore,
+          resolveLlm: () => fakeLlm(['text', 'image']) as LlmRuntime })
         const value = await tool.execute({ prompt: 'change background', provider, referenceImages: references }, routedExec('codex', 'm')) as { paths: string[]; images: typeof ref[] }
         assert.equal(wire.requests[0].url, provider === 'gpt' ? IMAGE_EDIT_URL : GROK_IMAGE_EDIT_URL)
         const body = wire.requests[0].body as Record<string, unknown>
@@ -736,7 +749,7 @@ for (const provider of ['gpt', 'grok'] as const) {
         assert.equal(body.referenceImages, undefined)
         assert.deepEqual(reads, references.map(r => r.attachmentId))
         assert.equal(readFileSync(value.paths[0], 'utf8'), 'one')
-        const rendered = tool.output.render({ prompt: 'change background' }, value as never)
+        const rendered = tool.output.render({ prompt: 'change background' }, value as unknown as JsonValue)
         assert.match((rendered[0] as { text: string }).text, /Image references/)
         // Same structured reference is usable immediately inside a nested Code Mode call.
         await tool.execute({ prompt: 'make it brighter', provider, referenceImages: value.images }, routedExec('codex', 'm', { parent: Symbol('code') }))
@@ -750,7 +763,7 @@ test('image editing: invalid references, missing store, limits, cancellation nev
   const { ref, store } = editFixture()
   let requests = 0
   const fetchFn = (async () => { requests++; throw new Error('must not fetch') }) as FetchFn
-  const options = { codexTokens: memoryTokens(codexSession), fetchFn, resolveAttachments: () => store as never }
+  const options = { codexTokens: memoryTokens(codexSession), fetchFn, resolveAttachments: () => store as AttachmentStore }
   const tool = createImageGenerateTool(options)
   for (const references of [[], Array(6).fill(ref), [ref, ref], [{ ...ref, attachmentId: '/tmp/a.png' }], [{ ...ref, width: 0 }], [{ ...ref, bytes: 4 }]]) {
     await assert.rejects(() => tool.execute({ prompt: 'edit', referenceImages: references }, fakeExec()))
@@ -767,7 +780,7 @@ test('image editing: provider policy fallback remains editing; upstream errors d
   const { ref, store } = editFixture()
   const wire = sequenceFetch([new Response('bad edit', { status: 400 })])
   const tool = createImageGenerateTool({ codexTokens: memoryTokens(codexSession), grokTokens: memoryTokens(grokSession),
-    providerEnabled: p => p === 'grok', fetchFn: wire.fetchFn, resolveAttachments: () => store as never })
+    providerEnabled: p => p === 'grok', fetchFn: wire.fetchFn, resolveAttachments: () => store as AttachmentStore })
   await assert.rejects(() => tool.execute({ prompt: 'edit', provider: 'gpt', referenceImages: [ref] }, fakeExec()), /400/)
   assert.equal(wire.requests.length, 1)
   assert.equal(wire.requests[0].url, GROK_IMAGE_EDIT_URL)

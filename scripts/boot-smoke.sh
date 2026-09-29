@@ -9,26 +9,39 @@
 #   - the log shows no cordis patch skips ("name mismatch" style silent
 #     skips) and no module-load failures.
 #
-# After the logged-out checks it copies test/fixtures/usage-bar-profile
-# into the temp home. Those files are fake credentials, never a real
-# provider login. scripts/usage-bar-preload.mjs answers usage calls and
-# refuses every other provider host. A headless Chrome then opens the web
-# UI and checks that the usage bar rendered.
+# It needs no browser and no fixture profile. The signed-in UI checks are
+# the host E2E, scripts/host-e2e.sh.
 #
 # Usage:
 #   DSH_VERSION=0.2.0-rc.1 bash scripts/boot-smoke.sh
 #   PLUGIN_SOURCE=/path/to/checkout bash scripts/boot-smoke.sh   # default: this repo
-#   DSH_BIN=/path/to/dsh bash scripts/boot-smoke.sh              # default: npx @deepseek-ai/dsh@<v>
+#   DSH_BIN=/path/to/dsh bash scripts/boot-smoke.sh              # default: the one npx installs for <v>
 #   KEEP_SMOKE_HOME=1 bash scripts/boot-smoke.sh                  # keep the temp profile for inspection
 #
 # Env:
-#   DSH_VERSION   - harness version to boot (default: newest in dsh-versions.txt)
-#   PLUGIN_SOURCE - what `dsh plugin add` installs (default: this repo dir)
-#   DSH_BIN       - dsh binary (default: npx -y @deepseek-ai/dsh@<version>)
-set -euo pipefail
+#   DSH_VERSION        - harness version to boot (default: newest in dsh-versions.txt)
+#   PLUGIN_SOURCE      - what `dsh plugin add` installs (default: this repo dir)
+#   DSH_BIN            - dsh binary (default: the one npx installs for <version>)
+#   SMOKE_ALLOW_BUILDS - 1 writes the README's `allowBuilds` entry into the
+#                        temp profile before the install. A GitHub source
+#                        needs it on DSH versions that refuse its `prepare`
+#                        (ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED).
+#
+# The server runs without a network guard. On a logged-out profile the
+# plugin sends no provider request, and externalUsage refuses before
+# contacting a usage host; the checks below cover that refusal.
+#
+# Exit 0 on pass, 1 when a check fails (SMOKE FAIL, including the host
+# refusing the plugin for its peers), and 2 when the smoke could not run: a
+# setup command such as npx or mktemp failed, or `dsh plugin add` failed
+# for another reason, which its log cannot tell apart from a registry outage.
+set -Eeuo pipefail
+# A command failing outside the explicit checks below is a setup problem,
+# never a finding about the plugin, so it exits 2 instead of set -e's 1.
+trap 'echo "SMOKE SETUP FAILURE: command failed at line $LINENO: $BASH_COMMAND" >&2; exit 2' ERR
 
-# Inherited process environment wins over $DSH_HOME/.credentials.yaml.
-# Drop these names so a developer shell cannot supply a real key.
+# Inherited process environment wins over $DSH_HOME/.credentials.yaml. The
+# logged-out checks need these unset, and a developer shell may export them.
 unset OPENCODE_GO_API_KEY KIMI_CODING_API_KEY CURSOR_SUBSCRIPTION_OAUTH || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,25 +49,42 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 DSH_VERSION="${DSH_VERSION:-$(grep -v '^#' "$REPO_ROOT/dsh-versions.txt" | grep -v '^[[:space:]]*$' | tail -1)}"
 PLUGIN_SOURCE="${PLUGIN_SOURCE:-$REPO_ROOT}"
-DSH_CLI="${DSH_BIN:-npx --yes @deepseek-ai/dsh@$DSH_VERSION}"
+# Resolve the dsh binary once, before any check, so a failed download is a
+# setup failure (exit 2) and not a refused plugin install.
+if [[ -z "${DSH_BIN:-}" ]]; then
+  DSH_BIN="$(npx --yes -p "@deepseek-ai/dsh@$DSH_VERSION" -c 'command -v dsh' | tail -1)"
+fi
+[[ -x "$DSH_BIN" ]] || { echo "SMOKE SETUP FAILURE: no dsh binary for $DSH_VERSION" >&2; exit 2; }
 
-SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/dsh-smoke-XXXXXX")"
-export DSH_HOME="$SMOKE_HOME"
-WEB_LOG="$SMOKE_HOME/web.log"
+# Set before anything is allocated, so the trap can run at any point: a
+# failed mktemp must not strand the directory made before it.
+SMOKE_HOME=""
+HOST_TMP=""
 WEB_PID=""
 
 cleanup() {
+  # Cleanup never changes the exit code the run already chose.
+  trap - ERR
+  set +e
   if [[ -n "$WEB_PID" ]] && kill -0 "$WEB_PID" 2>/dev/null; then
     kill "$WEB_PID" 2>/dev/null || true
     wait "$WEB_PID" 2>/dev/null || true
   fi
-  if [[ "${KEEP_SMOKE_HOME:-0}" != "1" ]]; then
-    rm -rf "$SMOKE_HOME"
+  if [[ "${KEEP_SMOKE_HOME:-0}" == "1" ]]; then
+    [[ -z "$SMOKE_HOME" ]] || echo "KEEP_SMOKE_HOME=1: profile kept at $SMOKE_HOME"
   else
-    echo "KEEP_SMOKE_HOME=1: profile kept at $SMOKE_HOME"
+    [[ -z "$SMOKE_HOME" ]] || rm -rf "$SMOKE_HOME"
   fi
+  [[ -z "$HOST_TMP" ]] || rm -rf "$HOST_TMP"
 }
 trap cleanup EXIT
+
+SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/dsh-smoke-XXXXXX")"
+# The host leaves scratch dirs (dsh-spill-*) in its TMPDIR; this one goes
+# with the run. Short, under /tmp, because Unix socket paths are limited.
+HOST_TMP="$(mktemp -d /tmp/dsh-smoke-tmp-XXXXXX)"
+export DSH_HOME="$SMOKE_HOME"
+WEB_LOG="$SMOKE_HOME/web.log"
 
 fail() {
   echo "SMOKE FAIL: $1" >&2
@@ -71,23 +101,44 @@ fail() {
   exit 1
 }
 
+# `dsh plugin add` failed. The host's peer refusal is a finding; any other
+# failure (registry, network, disk, a dependency install) is not one.
+install_fail() {
+  if grep -qi "incompatible with dsh" "$SMOKE_HOME/plugin-add.log" 2>/dev/null; then
+    fail "DSH $DSH_VERSION refused the plugin's peers (see $SMOKE_HOME/plugin-add.log)"
+  fi
+  echo "SMOKE SETUP FAILURE: plugin install failed without a peer refusal" >&2
+  tail -80 "$SMOKE_HOME/plugin-add.log" >&2 || true
+  exit 2
+}
+
 echo "== boot smoke: DSH $DSH_VERSION, plugin from $PLUGIN_SOURCE =="
 
 # 1. Install the plugin into an isolated web profile.
 # `dsh plugin` is a pnpm scoped to the profile dir; `add <dir>` installs local checkouts.
-$DSH_CLI plugin --profile web add "$PLUGIN_SOURCE" > "$SMOKE_HOME/plugin-add.log" 2>&1 \
-  || fail "plugin install failed (see $SMOKE_HOME/plugin-add.log)"
-if ! $DSH_CLI plugin --profile web list 2>/dev/null | grep -qi "dsh-subscription-hub"; then
-  fail "plugin not listed after install"
+if [[ "${SMOKE_ALLOW_BUILDS:-0}" == "1" ]]; then
+  # `plugin list` creates the profile and its pnpm-workspace.yaml.
+  "$DSH_BIN" plugin --profile web list > /dev/null 2>&1 \
+    || { echo "SMOKE SETUP FAILURE: could not create the web profile" >&2; exit 2; }
+  printf 'allowBuilds:\n  dsh-subscription-hub: true\n' >> "$SMOKE_HOME/profiles/web/pnpm-workspace.yaml"
+  echo "ok: profile allows this package's prepare script"
 fi
+"$DSH_BIN" plugin --profile web add "$PLUGIN_SOURCE" > "$SMOKE_HOME/plugin-add.log" 2>&1 \
+  || install_fail
+# A list that did not run says nothing about the install; only a list that
+# ran and lacks the plugin is a finding. Capturing it also keeps grep -q
+# from closing the pipe on dsh.
+listed=""
+listed="$("$DSH_BIN" plugin --profile web list 2>"$SMOKE_HOME/plugin-list.err")" || {
+  echo "SMOKE SETUP FAILURE: dsh plugin list failed" >&2
+  tail -20 "$SMOKE_HOME/plugin-list.err" >&2 || true
+  exit 2
+}
+grep -qi "dsh-subscription-hub" <<< "$listed" || fail "plugin not listed after install"
 echo "ok: plugin installed and listed in the web profile"
 
-# 2. Boot the web UI headless on an OS-picked port. The preload is the
-# usage host for this process: fixture JSON for the usage URLs, and a
-# refusal for every other provider host.
-export USAGE_BAR_SEEN="$SMOKE_HOME/usage-seen.jsonl"
-export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--import file://${SCRIPT_DIR}/usage-bar-preload.mjs"
-$DSH_CLI --profile web --no-open --port 0 > "$WEB_LOG" 2>&1 &
+# 2. Boot the web UI headless on an OS-picked port.
+TMPDIR="$HOST_TMP" "$DSH_BIN" --profile web --no-open --port 0 > "$WEB_LOG" 2>&1 &
 WEB_PID=$!
 
 URL=""
@@ -143,8 +194,14 @@ rpc() {
     --data-binary "{\"type\":\"client-request\",\"rpcId\":\"smoke-${endpoint}\",\"method\":\"subscriptions-auth.${endpoint}\",\"payload\":${payload}}" \
     "${BASE}/api/subscriptions-auth.${endpoint}" || true)"
   [[ "$code" == "200" ]] || fail "subscriptions-auth.${endpoint} answered HTTP ${code}"
-  node "$SCRIPT_DIR/assert-smoke-rpc.mjs" "$body" "$endpoint" "$expect" \
-    || fail "subscriptions-auth.${endpoint} did not match the logged-out contract"
+  local status=0
+  node "$SCRIPT_DIR/assert-smoke-rpc.mjs" "$body" "$endpoint" "$expect" || status=$?
+  case "$status" in
+    0) ;;
+    1) fail "subscriptions-auth.${endpoint} did not match the logged-out contract" ;;
+    # 2, or node missing (127), not executable (126), or killed by a signal.
+    *) echo "SMOKE SETUP FAILURE: the ${endpoint} check did not run (exit ${status})" >&2; exit 2 ;;
+  esac
 }
 rpc status '{}' status
 rpc externalStatus '{}' external-status
@@ -153,41 +210,8 @@ rpc externalUsage '{"source":"opencode-go"}' external-usage
 rpc externalUsage '{"source":"kimi-code"}' external-usage
 echo "ok: logged-out auth, Cursor, and external-usage RPCs answer"
 
-# 5. Stop that server and boot again with the fixture profile already on
-# disk. The credential provider reads $DSH_HOME/.credentials.yaml at startup,
-# and the auth store is read from auth.json; both have to exist before the
-# process starts. The second boot is the one whose composer the bar check opens.
-kill "$WEB_PID" 2>/dev/null || true
-wait "$WEB_PID" 2>/dev/null || true
-WEB_PID=""
-mkdir -p "$SMOKE_HOME/plugins/subscriptions"
-cp "$REPO_ROOT/test/fixtures/usage-bar-profile/.credentials.yaml" "$SMOKE_HOME/.credentials.yaml"
-cp "$REPO_ROOT/test/fixtures/usage-bar-profile/plugins/subscriptions/auth.json" \
-  "$SMOKE_HOME/plugins/subscriptions/auth.json"
-chmod 600 "$SMOKE_HOME/.credentials.yaml" "$SMOKE_HOME/plugins/subscriptions/auth.json"
-WEB_LOG="$SMOKE_HOME/web-bar.log"
-$DSH_CLI --profile web --no-open --port 0 > "$WEB_LOG" 2>&1 &
-WEB_PID=$!
-URL=""
-for _ in $(seq 1 60); do
-  if ! kill -0 "$WEB_PID" 2>/dev/null; then
-    fail "web UI exited during the fixture boot"
-  fi
-  URL="$(grep -oE 'http://[^[:space:]"'\'']+' "$WEB_LOG" 2>/dev/null | head -1 || true)"
-  if [[ -n "$URL" ]]; then break; fi
-  sleep 2
-done
-[[ -n "$URL" ]] || fail "no serving URL appeared for the fixture boot"
-JAR="$SMOKE_HOME/cookies-bar.txt"
-CODE1="$(curl -s -c "$JAR" -o /dev/null -w '%{http_code}' --max-time 15 "$URL" || true)"
-[[ "$CODE1" == "303" ]] || fail "fixture boot token handshake answered HTTP $CODE1, expected 303"
-BASE="${URL%%\?*}"
-BASE="${BASE%/}"
-node "$SCRIPT_DIR/assert-usage-bar-ui.mjs" "$BASE" "$JAR" "$USAGE_BAR_SEEN" \
-  || fail "usage bar was not rendered"
-
-# 6. No silent mount failures in the log.
-if grep -qiE "name mismatch|failed to load plugin|plugin failed|Cannot find module|ERR_MODULE_NOT_FOUND" "$SMOKE_HOME/web.log" "$WEB_LOG"; then
+# 5. No silent mount failures in the log.
+if grep -qiE "name mismatch|failed to load plugin|plugin failed|Cannot find module|ERR_MODULE_NOT_FOUND" "$WEB_LOG"; then
   fail "log shows plugin load/patch failures"
 fi
 echo "ok: no patch skips or module-load failures in the log"

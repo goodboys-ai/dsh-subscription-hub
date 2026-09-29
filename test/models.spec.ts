@@ -16,6 +16,7 @@ import {
   fetchCodexModels,
   isCodexPermanentRefreshError,
 } from '../src/providers/codex.js'
+import type { PoolAdapter } from '../src/providers/pool.js'
 import { toResponsesInput } from '../src/translate/responses.js'
 import { resolveImages } from '../src/translate/resolved.js'
 import { GrokAdapter } from '../src/providers/grok.js'
@@ -1407,7 +1408,7 @@ test('a member adapter keeps catalog rows and delegates pooled / extra ids', asy
     streamIdleTimeoutMs: 1000,
     tokens: memoryTokens(codexSession),
     discovery: false,
-    pool: () => fakePool as never,
+    pool: () => fakePool satisfies Pick<PoolAdapter, 'modelsForProvider' | 'owns' | 'resolveModel' | 'stream'> as unknown as PoolAdapter,
   })
   const models = await adapter.listModels('codex')
   assert.deepEqual(models.map(model => model.id), ['gpt-5.1-codex', 'smart'])

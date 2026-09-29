@@ -1,12 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, statSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CursorModelSettingsStore, validateCursorModelSettings } from '../src/providers/cursor-model-settings.js'
 
-test('Cursor model visibility persists, validates input, and keeps its file private', async () => {
-  const path = join(mkdtempSync(join(tmpdir(), 'cursor-model-settings-')), 'settings.json')
+test('Cursor model visibility persists, validates input, and keeps its file private', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'cursor-model-settings-'))
+  // Registered before the first assertion so a failure cannot strand the dir.
+  t.after(() => { rmSync(dir, { recursive: true, force: true }) })
+  const path = join(dir, 'settings.json')
   const store = new CursorModelSettingsStore(path)
   assert.deepEqual(store.get(), {})
   await store.set({ visibleModels: ['composer-2.5', 'composer-2.5', 'grok-code'] })

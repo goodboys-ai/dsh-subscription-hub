@@ -28,6 +28,14 @@
  * a router keyed on that provider's endpoint URLs as independent literals
  * (never imported from src — see the note above) plus helpers minting
  * whatever credentials its session parser requires.
+ *
+ * Provenance:
+ * Source: the Codex CLI's ChatGPT backend wire (OAuth client id, Responses
+ * `service_tier` fast mode, `wham/usage` windows), mirrored in
+ * src/providers/codex.ts, whose fast-tier check names codex-rs.
+ * Shapes as of: 1891a32 (2026-09-28). Not compared with the live provider
+ * since; update this line when a canary run confirms or corrects them.
+ * Drift signal: the manual pre-release canary's login plus one model request.
  */
 import type { TestContext } from 'node:test'
 /**

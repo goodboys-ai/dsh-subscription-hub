@@ -125,6 +125,16 @@ export async function grokDiscovery(): Promise<GrokDiscovery> {
 }
 
 /**
+ * Forget the resolved OIDC endpoints, so the next {@link grokDiscovery} fetches
+ * the discovery document again. Test-only: the cache is module-level and
+ * outlives each test.
+ * @internal Exported for tests only; not part of the plugin's public surface.
+ */
+export function resetGrokDiscoveryForTests(): void {
+  discoveryCache = undefined
+}
+
+/**
  * Build the grok flow facts for the OAuth flow engine (async because the
  * authorize URL comes from OIDC discovery).
  * @returns the flow spec for one attempt.

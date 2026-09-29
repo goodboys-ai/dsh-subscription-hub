@@ -109,7 +109,47 @@ const PROVIDER_NAMES: Record<BadgeProvider, string> = {
   'kimi-coding': 'Kimi Code',
 }
 
-interface UsageRosterEntry { provider: BadgeProvider; account: AccountStatus }
+export interface UsageRosterEntry { provider: BadgeProvider; account: AccountStatus }
+
+/** Key of one account's cached windows: `provider:accountKey`. */
+function usageKeyOf(provider: BadgeProvider, account: AccountStatus): string {
+  return `${provider}:${account.key}`
+}
+
+/**
+ * Group per-account usage into the badge's provider rows, in roster order
+ * (the `status` provider order, default account first) so rows don't jump
+ * around as polls settle at different times. An account without windows is
+ * left out, and so is a provider whose accounts all lack windows.
+ * @param roster - accounts from {@link loadBadgeRoster}.
+ * @param windowsOf - each account's windows, keyed `provider:accountKey`.
+ * @param plans - the plan each usage call reported, same keys; the roster's plan is the fallback.
+ * @returns one display per provider with at least one account that has windows.
+ */
+export function groupUsageDisplays(
+  roster: readonly UsageRosterEntry[],
+  windowsOf: ReadonlyMap<string, UsageWindow[]>,
+  plans: ReadonlyMap<string, string>,
+): ProviderUsageDisplay[] {
+  const byProvider = new Map<BadgeProvider, ProviderUsageDisplay>()
+  for (const { provider, account } of roster) {
+    const key = usageKeyOf(provider, account)
+    const windows = windowsOf.get(key)
+    if (windows === undefined) continue
+    const plan = plans.get(key) ?? account.plan
+    const row: AccountUsageDisplay = {
+      key: account.key,
+      isDefault: account.isDefault,
+      ...account.account === undefined ? {} : { account: account.account },
+      ...plan === undefined ? {} : { plan },
+      windows,
+    }
+    const display = byProvider.get(provider)
+    if (display === undefined) byProvider.set(provider, { provider, name: PROVIDER_NAMES[provider], accounts: [row] })
+    else display.accounts.push(row)
+  }
+  return [...byProvider.values()]
+}
 
 /** Read each account source independently so a failing endpoint cannot hide the others. */
 export async function loadBadgeRoster(rpc: ConnectionHandle['rpc']): Promise<{
@@ -337,15 +377,10 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
       const { roster, refreshed } = await loadBadgeRoster(rpc)
       if (!mountedRef.current) return
 
-      // Every logged-in account of every provider, in a stable order (the
-      // `status` provider order, default account first) so rows don't jump
-      // around as polls settle at different times.
-      const keyOf = (provider: BadgeProvider, account: AccountStatus): string => `${provider}:${account.key}`
-
       const lastKnown = lastKnownRef.current
       // Drop last-known state for anything no longer logged in — that is a
       // real signal, unlike a fetch failure.
-      const live = new Set(roster.map(({ provider, account }) => keyOf(provider, account)))
+      const live = new Set(roster.map(({ provider, account }) => usageKeyOf(provider, account)))
       for (const key of lastKnown.keys()) {
         if (refreshed.has(key.split(':', 1)[0] as BadgeProvider) && !live.has(key)) lastKnown.delete(key)
       }
@@ -362,7 +397,7 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
       for (const r of results) {
         if (r.status !== 'fulfilled') continue // keep whatever is cached for this account
         const { provider, account, usage } = r.value
-        const key = keyOf(provider, account)
+        const key = usageKeyOf(provider, account)
         if (usage.plan !== undefined) plans.set(key, usage.plan)
         if (!usage.supported || !usage.windows || usage.windows.length === 0) {
           lastKnown.delete(key)
@@ -371,25 +406,8 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
         lastKnown.set(key, usage.windows)
       }
 
-      const byProvider = new Map<BadgeProvider, ProviderUsageDisplay>()
-      for (const { provider, account } of roster) {
-        const key = keyOf(provider, account)
-        const windows = lastKnown.get(key)
-        if (windows === undefined) continue
-        const plan = plans.get(key) ?? account.plan
-        const row: AccountUsageDisplay = {
-          key: account.key,
-          isDefault: account.isDefault,
-          ...account.account === undefined ? {} : { account: account.account },
-          ...plan === undefined ? {} : { plan },
-          windows,
-        }
-        const display = byProvider.get(provider)
-        if (display === undefined) byProvider.set(provider, { provider, name: PROVIDER_NAMES[provider], accounts: [row] })
-        else display.accounts.push(row)
-      }
       setDisplays(previous => [
-        ...byProvider.values(),
+        ...groupUsageDisplays(roster, lastKnown, plans),
         ...previous.filter(display => !refreshed.has(display.provider)),
       ])
     } catch {

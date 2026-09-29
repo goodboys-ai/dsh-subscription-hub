@@ -5,3 +5,5 @@ lib-test/
 overlay.yml
 .DS_Store
 .cache/
+reports/
+.stryker-tmp/

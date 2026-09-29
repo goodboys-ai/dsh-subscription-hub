@@ -1,23 +1,25 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageId } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, ImageBlock, Message } from '@deepseek-ai/dsh-llm'
 import { imageRequestTarget, resolveImages } from '../src/translate/resolved.js'
 import { ClaudeAdapter } from '../src/providers/claude.js'
 import { AccountTokenManager } from '../src/providers/accounts.js'
 import type { ClaudeSession } from '../src/auth/store.js'
+import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentStore, ImageAttachmentRef, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
 
 const LIMIT = { maxEdge: 2000, maxBytes: 3_750_000 }
-const WIDE = { attachmentId: 'wide', mediaType: 'image/png', bytes: 9, width: 2560, height: 1215 }
-const TALL = { attachmentId: 'tall', mediaType: 'image/png', bytes: 9, width: 1800, height: 2329 }
-const SMALL = { attachmentId: 'small', mediaType: 'image/png', bytes: 9, width: 800, height: 600 }
+const WIDE: ImageAttachmentRef = { attachmentId: AttachmentId('wide'), mediaType: 'image/png', bytes: 9, width: 2560, height: 1215 }
+const TALL: ImageAttachmentRef = { attachmentId: AttachmentId('tall'), mediaType: 'image/png', bytes: 9, width: 1800, height: 2329 }
+const SMALL: ImageAttachmentRef = { attachmentId: AttachmentId('small'), mediaType: 'image/png', bytes: 9, width: 800, height: 600 }
 
-function withImages(...refs: object[]): Message[] {
+function withImages(...refs: ImageAttachmentRef[]): Message[] {
   return [{
     id: MessageId('m'),
     role: 'user',
     source: { kind: 'user' },
-    content: refs.map(attachment => ({ type: 'image', attachment }) as never),
+    content: refs.map(attachment => ({ type: 'image', attachment }) satisfies ImageBlock),
   }]
 }
 
@@ -26,18 +28,29 @@ function store(options: { projection?: 'unsupported' } = {}) {
   const calls: string[] = []
   const targets: unknown[] = []
   const attachments = {
-    readImage: async (ref: { attachmentId: string }) => {
+    readImage: async (ref: ImageAttachmentRef) => {
       calls.push(`stored:${ref.attachmentId}`)
       return { ref, data: new Uint8Array([111]) }
     },
-    readImageRequest: async (ref: { attachmentId: string }, target: unknown) => {
+    readImageRequest: async (ref: ImageAttachmentRef, target: unknown): Promise<RequestImageAttachment> => {
       if (options.projection === 'unsupported') throw new Error('The mounted attachment provider cannot derive model-request images.')
       calls.push(`request:${ref.attachmentId}`)
       targets.push(target)
-      return { attachment: ref, data: new Uint8Array([115]), mediaType: 'image/jpeg' }
+      return {
+        variantId: ImageVariantId('v'),
+        attachment: ref,
+        data: new Uint8Array([115]),
+        mediaType: 'image/jpeg',
+        bytes: 1,
+        width: 1,
+        height: 1,
+        depth: 'uchar',
+        space: 'srgb',
+        hasAlpha: false,
+      }
     },
   }
-  return { attachments: attachments as never, calls, targets }
+  return { attachments: attachments satisfies Pick<AttachmentStore, 'readImage' | 'readImageRequest'> as unknown as AttachmentStore, calls, targets }
 }
 
 test('image request targets fit the long edge and carry both host projection shapes', () => {

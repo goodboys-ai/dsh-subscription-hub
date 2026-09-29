@@ -4,14 +4,16 @@
  * merge helper shared by the four adapters.
  */
 
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 
 const HOME = mkdtempSync(join(tmpdir(), 'model-defaults-test-'))
+// Suite-level hook: the mkdtemp is top-level, so there is no test context to hang t.after on.
+after(() => { rmSync(HOME, { recursive: true, force: true }) })
 
 const {
   defaultEffortOf,
@@ -41,6 +43,9 @@ async function fresh(): Promise<void> {
   assert.ok(modelDefaultsFilePath().startsWith(HOME), 'the store resolves inside this spec\'s temp home')
   await resetModelDefaultsForTests()
   rmSync(modelDefaultsFilePath(), { force: true })
+  // Tests that plant a file write it directly; the directory must not depend
+  // on an earlier test's save having created it.
+  mkdirSync(dirname(modelDefaultsFilePath()), { recursive: true })
   await loadModelDefaults()
 }
 

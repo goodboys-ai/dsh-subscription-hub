@@ -25,9 +25,10 @@ const css = registerHooks({
 })
 const { AccountWindows, compactSegment, createCurrentModelReader, previewWindows,
   collapsedDisplays, expandedDisplays, retainSubscriptionSelection, usageBadgeIcon,
-  loadBadgeRoster, usageOf } = await import('../src/client/SubscriptionUsageBadge.js')
+  groupUsageDisplays, loadBadgeRoster, usageOf } = await import('../src/client/SubscriptionUsageBadge.js')
 css.deregister()
-import type { ProviderUsageDisplay } from '../src/client/SubscriptionUsageBadge.js'
+import type { ProviderUsageDisplay, UsageRosterEntry } from '../src/client/SubscriptionUsageBadge.js'
+import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
 import type { UsageWindow } from '../src/client/SubscriptionsSection.js'
 import { en, zh } from '../src/client/locales.js'
 
@@ -123,7 +124,7 @@ test('quota roster and usage calls include Cursor, OpenCode Go and Kimi while to
       'opencode-go': { configured: true }, 'kimi-code': { configured: true },
     } }
     return { ok: true, value: { supported: true, windows: [{ kind: 'other', usedPercent: 20 }] } }
-  } } as never
+  } } satisfies Pick<ClientConnectionRpc, 'call'> as ClientConnectionRpc
   const { roster, refreshed } = await loadBadgeRoster(rpc)
   assert.deepEqual(roster.map(entry => entry.provider), ['cursor-subscription', 'opencode-go', 'kimi-coding'])
   assert.equal(refreshed.has('codex'), false)
@@ -136,7 +137,38 @@ test('quota roster and usage calls include Cursor, OpenCode Go and Kimi while to
   ])
 })
 
-test('data icon supports both DSH export names without requiring either named import', () => {
+test('grouping merges a provider\'s accounts into one row in roster order and drops accounts without windows', () => {
+  const roster: UsageRosterEntry[] = [
+    { provider: 'codex', account: { key: 'a', isDefault: true, account: 'a@example.invalid', plan: 'plus' } },
+    { provider: 'claude', account: { key: 'c', isDefault: true } },
+    { provider: 'codex', account: { key: 'b', isDefault: false } },
+    { provider: 'kimi-coding', account: { key: 'kimi-code', isDefault: true } },
+  ]
+  const session: UsageWindow[] = [{ kind: 'session', usedPercent: 10 }]
+  const weekly: UsageWindow[] = [{ kind: 'weekly', usedPercent: 20 }]
+  const rows = groupUsageDisplays(
+    roster,
+    new Map<string, UsageWindow[]>([['codex:a', session], ['codex:b', weekly], ['kimi-coding:kimi-code', session]]),
+    new Map([['codex:b', 'pro']]),
+  )
+  // Claude has no windows, so it has no row; Codex's second account joins
+  // the first row instead of opening a new one.
+  assert.deepEqual(rows, [
+    { provider: 'codex', name: 'Codex', accounts: [
+      { key: 'a', isDefault: true, account: 'a@example.invalid', plan: 'plus', windows: session },
+      { key: 'b', isDefault: false, plan: 'pro', windows: weekly },
+    ] },
+    { provider: 'kimi-coding', name: 'Kimi Code', accounts: [
+      { key: 'kimi-code', isDefault: true, windows: session },
+    ] },
+  ])
+  // A plan reported by the usage call outranks the one on the roster.
+  assert.equal(groupUsageDisplays(roster.slice(0, 1), new Map([['codex:a', session]]), new Map([['codex:a', 'pro']]))[0]?.accounts[0]?.plan, 'pro')
+})
+
+test('data icon supports both DSH export names without requiring either named import', (t) => {
+  // The empty case is a host contract miss, which warns once; keep it off the test output.
+  const warn = t.mock.method(console, 'warn', () => {})
   const modern = () => createElement('svg', { 'data-version': 'modern' })
   const legacy = () => createElement('svg', { 'data-version': 'legacy' })
   assert.equal(usageBadgeIcon({ IconDataOutlineRegular: modern, IconDataOutline16: legacy }), modern)
@@ -144,6 +176,7 @@ test('data icon supports both DSH export names without requiring either named im
   assert.equal(usageBadgeIcon({ IconDataOutline16: legacy }), legacy)
   assert.match(renderToStaticMarkup(createElement(usageBadgeIcon({ IconDataOutlineRegular: modern }))), /data-version="modern"/)
   assert.equal(renderToStaticMarkup(createElement(usageBadgeIcon({}))), '')
+  assert.equal(warn.mock.callCount(), 1)
 })
 
 test('Antigravity previews only the exact current model, retaining all hidden windows', () => {

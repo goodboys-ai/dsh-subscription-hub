@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Pin @deepseek-ai/* devDependencies to DSH ${{ matrix.dsh }}
+      - name: Pin @deepseek-ai/* devDependencies to the matrix DSH version
         env:
           DSH_VERSION: ${{ matrix.dsh }}
         run: |
@@ -74,7 +74,16 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - name: L1 host-export contract check
-        run: node scripts/check-host-exports.mjs --dsh ${{ matrix.dsh }}
+        env:
+          DSH_VERSION: ${{ matrix.dsh }}
+        run: node scripts/check-host-exports.mjs --dsh "$DSH_VERSION"
+      - name: L1 runtime host contract check
+        # Icons, slot outlets, DOM markers, services, theme tokens, and the
+        # shell's module table from src/client/host-contract.ts; tsc cannot
+        # see any of these.
+        env:
+          DSH_VERSION: ${{ matrix.dsh }}
+        run: node scripts/check-host-contract.mjs --dsh "$DSH_VERSION"
       - uses: actions/upload-artifact@v4
         with:
           name: pass-build-${{ matrix.dsh }}
@@ -131,10 +140,6 @@ jobs:
         with:
           name: plugin-tarball
           path: ${{ runner.temp }}/tarball
-      - name: Install Chrome for the usage-bar render check
-        run: |
-          wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo apt-get install -y /tmp/chrome.deb
       - name: L2 boot smoke test
         env:
           DSH_VERSION: ${{ matrix.dsh }}
@@ -147,13 +152,66 @@ jobs:
           path: dsh-versions.txt
           overwrite: true
 
+  host-e2e:
+    # The same tarball inside a signed-in `dsh web`, driven through headless
+    # Chrome: usage RPCs, model picker, one streamed Codex reply, the usage
+    # pill in the host's stats row, and slot crashes (see docs/testing.md).
+    # Provider traffic is answered by scripts/host-e2e-preload.mjs.
+    needs: [versions, pack]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        dsh: ${{ fromJson(needs.versions.outputs.dsh) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-tarball
+          path: ${{ runner.temp }}/tarball
+      - name: Find Chrome
+        # ubuntu-latest ships Chrome; install it only when the image lacks it.
+        run: |
+          if ! google-chrome --version; then
+            wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+            sudo apt-get install -y /tmp/chrome.deb
+            google-chrome --version
+          fi
+      - name: Host E2E
+        env:
+          DSH_VERSION: ${{ matrix.dsh }}
+          HOST_E2E_ARTIFACTS: ${{ runner.temp }}/host-e2e
+        run: |
+          TARBALL="$(ls "${{ runner.temp }}/tarball"/*.tgz | head -1)"
+          PLUGIN_SOURCE="$TARBALL" bash scripts/host-e2e.sh
+      - uses: actions/upload-artifact@v4
+        # Screenshot, DOM, browser console, web.log, and the provider request
+        # log of each failed browser attempt.
+        if: failure()
+        with:
+          name: host-e2e-evidence-${{ matrix.dsh }}
+          path: ${{ runner.temp }}/host-e2e
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pass-e2e-${{ matrix.dsh }}
+          path: dsh-versions.txt
+          overwrite: true
+
   ci-gate:
     # Stable required check for branch protection. A successful matrix job
     # uploads a version-named marker; missing markers keep this gate red even
     # when GitHub reports a skipped dependent job as successful.
     name: CI gate
     if: ${{ always() }}
-    needs: [versions, pack, build-and-test, boot-smoke, notes-lint]
+    needs: [versions, pack, build-and-test, boot-smoke, host-e2e, notes-lint]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -166,10 +224,11 @@ jobs:
           PACK_RESULT: ${{ needs.pack.result }}
           BUILD_RESULT: ${{ needs.build-and-test.result }}
           BOOT_RESULT: ${{ needs.boot-smoke.result }}
+          E2E_RESULT: ${{ needs.host-e2e.result }}
           NOTES_RESULT: ${{ needs.notes-lint.result }}
         run: |
           failed=0
-          for result in "$VERSIONS_RESULT" "$PACK_RESULT" "$BUILD_RESULT" "$BOOT_RESULT" "$NOTES_RESULT"; do
+          for result in "$VERSIONS_RESULT" "$PACK_RESULT" "$BUILD_RESULT" "$BOOT_RESULT" "$E2E_RESULT" "$NOTES_RESULT"; do
             [[ "$result" == success ]] || failed=1
           done
           mapfile -t versions < <(grep -Ev '^#|^[[:space:]]*$' dsh-versions.txt)
@@ -178,7 +237,7 @@ jobs:
             exit 1
           fi
           for version in "${versions[@]}"; do
-            for job in build boot; do
+            for job in build boot e2e; do
               marker="$RUNNER_TEMP/ci-artifacts/pass-$job-$version/dsh-versions.txt"
               if [[ ! -f "$marker" ]]; then
                 echo "Missing successful $job check for DSH $version" >&2

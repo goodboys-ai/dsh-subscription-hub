@@ -1,0 +1,288 @@
+name: Nightly
+
+on:
+  schedule:
+    # Daily at 02:23 UTC.
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  mutation:
+    # StrykerJS over the highest-risk pure logic (see stryker.config.mjs for
+    # the mutate/spec scope). Thresholds report but never fail the job; a
+    # failure here means the run itself broke, not that the score dropped.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:mutation
+      - name: Write mutation score to the job summary
+        if: always()
+        # Stryker's score: killed and timed-out mutants over every valid
+        # mutant. Survived and NoCoverage mutants count against it;
+        # CompileError, RuntimeError, and Ignored mutants are not valid and
+        # count nowhere.
+        run: |
+          node -e "
+            const fs = require('fs')
+            const report = JSON.parse(fs.readFileSync('reports/mutation/mutation-report.json', 'utf8'))
+            const count = {}
+            for (const file of Object.values(report.files ?? {})) {
+              for (const mutant of file.mutants ?? []) count[mutant.status] = (count[mutant.status] ?? 0) + 1
+            }
+            const n = status => count[status] ?? 0
+            const detected = n('Killed') + n('Timeout')
+            const valid = detected + n('Survived') + n('NoCoverage')
+            const score = valid === 0 ? 'n/a' : ((detected / valid) * 100).toFixed(2) + '%'
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              '## Mutation score\n\n' +
+              '| Metric | Value |\n| --- | --- |\n' +
+              '| Score | ' + score + ' |\n' +
+              '| Killed + timeout | ' + detected + ' |\n' +
+              '| Survived | ' + n('Survived') + ' |\n' +
+              '| No coverage | ' + n('NoCoverage') + ' |\n' +
+              '| Invalid (compile or runtime error) | ' + (n('CompileError') + n('RuntimeError')) + ' |\n\n' +
+              'Full report: download the \`mutation-report\` artifact and open \`index.html\`.\n')
+          "
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          if-no-files-found: warn
+
+  shuffled-repeat:
+    # Surfaces order-dependent and flaky tests before they hit a PR: the same
+    # compiled suite runs 5 times under node:test shuffling, each time with a
+    # printed seed so a failure reproduces locally with --test-random-seed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -p tsconfig.test.json
+      - name: Run the suite shuffled, 5 seeds
+        run: |
+          for i in 1 2 3 4 5; do
+            seed=$((RANDOM))
+            echo "=== shuffle run $i of 5, seed $seed ==="
+            if ! node --import ./test/hermetic.mjs --test --test-randomize --test-random-seed="$seed" "lib-test/test/**/*.spec.js"; then
+              echo "SHUFFLE FAILURE: seed $seed failed. Reproduce with:" >&2
+              echo "  node --import ./test/hermetic.mjs --test --test-randomize --test-random-seed=$seed \"lib-test/test/**/*.spec.js\"" >&2
+              exit 1
+            fi
+          done
+
+  next-host:
+    # Forward-compat check against the newest published DSH that is not yet
+    # in dsh-versions.txt. A version already in the window is covered by the
+    # CI matrix and skipped.
+    #
+    # The install would refuse the release tarball on that version, because
+    # its peers are an exact disjunction of the window. This job therefore
+    # packs a nightly-only tarball whose peers also allow the candidate, so
+    # the checks answer "would the plugin work if this version joined the
+    # window?". The release tarball and package.json peers never change here.
+    #
+    # Each check runs even when an earlier one failed, so the tracking issue
+    # lists all of them. Setup failures (npm, Chrome, the build, a check that
+    # exits 2) fail the job without opening an issue, since they say nothing
+    # about the new DSH.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve the newest published DSH version
+        id: resolve
+        run: |
+          set -euo pipefail
+          tags="$(npm view @deepseek-ai/dsh dist-tags --json)"
+          # npm's own semver orders the tags; no extra download.
+          version="$(TAGS="$tags" node -e "
+            const semver = require(require('path').join(process.argv[1], 'npm/node_modules/semver'))
+            const tags = JSON.parse(process.env.TAGS)
+            const found = [tags.next, tags.latest].filter(v => semver.valid(v))
+            if (found.length === 0) process.exit(1)
+            console.log(found.sort(semver.compare).at(-1))
+          " "$(npm root -g)")"
+          echo "dist-tags: $tags -> newest=$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "DSH_VERSION=$version" >> "$GITHUB_ENV"
+          if grep -qxF "$version" dsh-versions.txt; then
+            echo "known=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "known=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Skip versions already in the support window
+        if: steps.resolve.outputs.known == 'true'
+        run: echo "DSH $DSH_VERSION is already in dsh-versions.txt; the CI matrix covers it."
+      - name: Build and pack a nightly tarball that admits the candidate
+        id: pack
+        if: steps.resolve.outputs.known == 'false'
+        run: |
+          set -euo pipefail
+          pnpm build
+          cp package.json "$RUNNER_TEMP/package.json.release"
+          node -e "
+            const fs = require('fs')
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+            const version = process.env.DSH_VERSION
+            for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
+              if (name.startsWith('@deepseek-ai/dsh-')) pkg.peerDependencies[name] = range + ' || ' + version
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')
+          "
+          grep '"@deepseek-ai/dsh-llm"' package.json
+          tarball="$(pnpm pack --pack-destination "$RUNNER_TEMP" | tail -1)"
+          cp "$RUNNER_TEMP/package.json.release" package.json
+          echo "PLUGIN_SOURCE=$tarball" >> "$GITHUB_ENV"
+      - name: Find Chrome for the host E2E
+        id: chrome
+        if: steps.resolve.outputs.known == 'false'
+        run: |
+          if ! google-chrome --version; then
+            wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+            sudo apt-get install -y /tmp/chrome.deb
+            google-chrome --version
+          fi
+      # Every check exits 1 for a finding about the plugin on this DSH and 2
+      # when it could not run (npm, Chrome, the host UI harness). Each step
+      # records its code, so only a finding opens the tracking issue.
+      - name: L1 host-export contract check
+        id: exports
+        if: steps.pack.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set +e
+          node scripts/check-host-exports.mjs --dsh "$DSH_VERSION"
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+      - name: Host contract check
+        id: contract
+        if: steps.pack.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set +e
+          node scripts/check-host-contract.mjs --dsh "$DSH_VERSION"
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+      - name: L2 boot smoke test
+        id: boot
+        if: steps.pack.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set +e
+          bash scripts/boot-smoke.sh
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+      - name: Host E2E
+        id: e2e
+        if: steps.pack.outcome == 'success' && steps.chrome.outcome == 'success'
+        continue-on-error: true
+        env:
+          HOST_E2E_ARTIFACTS: ${{ runner.temp }}/host-e2e
+        run: |
+          set +e
+          bash scripts/host-e2e.sh
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+      - name: Collect the failed checks
+        id: verdict
+        if: steps.pack.outcome == 'success'
+        env:
+          EXPORTS: ${{ steps.exports.outcome }}:${{ steps.exports.outputs.code }}
+          CONTRACT: ${{ steps.contract.outcome }}:${{ steps.contract.outputs.code }}
+          BOOT: ${{ steps.boot.outcome }}:${{ steps.boot.outputs.code }}
+          E2E: ${{ steps.e2e.outcome }}:${{ steps.e2e.outputs.code }}
+        run: |
+          failed=""
+          setup=""
+          # Each value is "<outcome>:<exit code>". A skipped E2E (no Chrome)
+          # or a code other than 1 did not test the plugin.
+          sort_check() {
+            local name="$1" result="$2"
+            case "$result" in
+              success:*) ;;
+              failure:1) failed="$failed $name" ;;
+              *) setup="$setup $name($result)" ;;
+            esac
+          }
+          sort_check L1-host-exports "$EXPORTS"
+          sort_check host-contract "$CONTRACT"
+          sort_check boot-smoke "$BOOT"
+          sort_check host-e2e "$E2E"
+          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
+          echo "setup=${setup# }" >> "$GITHUB_OUTPUT"
+          if [ -n "$failed" ]; then
+            echo "DSH $DSH_VERSION failed:$failed" >&2
+          fi
+          if [ -n "$setup" ]; then
+            echo "Checks that could not run on DSH $DSH_VERSION:$setup; not reported as a compatibility break." >&2
+          fi
+          if [ -z "$failed$setup" ]; then
+            echo "DSH $DSH_VERSION passes every check with the widened peers."
+          fi
+      - uses: actions/upload-artifact@v4
+        if: steps.e2e.outcome == 'failure'
+        with:
+          name: host-e2e-evidence-next
+          path: ${{ runner.temp }}/host-e2e
+          if-no-files-found: warn
+      - name: Open or update the tracking issue
+        if: steps.verdict.outputs.failed != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ steps.verdict.outputs.failed }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          title="Nightly: DSH $DSH_VERSION breaks dsh-subscription-hub"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Failed again on $DSH_VERSION ($FAILED): $run_url"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
+              --body "The nightly forward-compat job failed for DSH $DSH_VERSION, which is not yet in dsh-versions.txt. The checks ran on a nightly tarball whose peers also admit $DSH_VERSION.
+
+          Failed checks: $FAILED
+          Run: $run_url"
+          fi
+      - name: Fail the job when a check failed or could not run
+        if: steps.verdict.outputs.failed != '' || steps.verdict.outputs.setup != ''
+        env:
+          FAILED: ${{ steps.verdict.outputs.failed }}
+          SETUP: ${{ steps.verdict.outputs.setup }}
+        run: |
+          echo "DSH $DSH_VERSION: failed [$FAILED] could not run [$SETUP]" >&2
+          exit 1

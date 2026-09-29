@@ -2,9 +2,8 @@
  * Copilot provider unit tests beyond the catalog (models.spec.ts): the VS
  * Code version resolution behind the Editor-Version header, and the
  * GitHub-token → Copilot-token exchange. All fetches are injected; no network.
- *
- * Test order matters within this file: the version cache is module-level, so
- * the empty-cache fallback test runs first.
+ * The version cache is module-level; each version test starts from an empty
+ * cache, so the file passes in any order (`--test-randomize`).
  */
 
 import { test } from 'node:test'
@@ -29,6 +28,7 @@ import {
   isCopilotPermanentRefreshError,
   latestVsCodeVersion,
   refreshCopilot,
+  resetVsCodeVersionCacheForTests,
   VSCODE_RELEASES_URL,
 } from '../src/providers/copilot.js'
 import { OAuthEndpointError, validateModels } from '../src/providers/common.js'
@@ -58,11 +58,13 @@ function fakeFetch(routes: Record<string, { payload: unknown; status?: number } 
 }
 
 test('latestVsCodeVersion falls back to the pinned version when the feed fails (empty cache)', async () => {
+  resetVsCodeVersionCacheForTests()
   const failing: FetchFn = () => Promise.reject(new Error('offline'))
   assert.equal(await latestVsCodeVersion(failing, true), FALLBACK_VSCODE_VERSION)
 })
 
 test('latestVsCodeVersion serves the latest stable from the feed, then the cache', async () => {
+  resetVsCodeVersionCacheForTests()
   const { fetchFn } = fakeFetch({ [VSCODE_RELEASES_URL]: { payload: ['3.1.4', '3.1.3'] } })
   assert.equal(await latestVsCodeVersion(fetchFn, true), '3.1.4')
   // A throwing fetch must not be consulted while the cache is fresh.
@@ -71,6 +73,9 @@ test('latestVsCodeVersion serves the latest stable from the feed, then the cache
 })
 
 test('latestVsCodeVersion serves the stale cache when a forced refresh fails', async () => {
+  resetVsCodeVersionCacheForTests()
+  const { fetchFn } = fakeFetch({ [VSCODE_RELEASES_URL]: { payload: ['3.1.4'] } })
+  assert.equal(await latestVsCodeVersion(fetchFn, true), '3.1.4')
   const offline: FetchFn = () => Promise.reject(new Error('offline'))
   assert.equal(await latestVsCodeVersion(offline, true), '3.1.4')
 })

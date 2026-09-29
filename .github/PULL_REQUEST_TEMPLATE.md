@@ -19,6 +19,7 @@ concise decision rationale. -->
 ## Verification
 
 - Commands run and results:
+- Test that fails without this change (for a bug fix), and how you saw it fail:
 - DSH versions checked:
 - Manual provider or UI checks, if relevant:
 - Remaining gaps or checks not run:

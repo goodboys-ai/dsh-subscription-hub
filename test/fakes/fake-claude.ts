@@ -25,6 +25,14 @@
  * What this proves: our side of the contract (JSON grant shape, claim paths,
  * refresh grants, SSE translation). What it cannot prove: that Anthropic
  * still honors the contract — that is the manual pre-release canary.
+ *
+ * Provenance:
+ * Source: the Claude Code CLI's OAuth client identity plus Anthropic's
+ * Messages API (request assembly and SSE in src/translate/anthropic.ts);
+ * usage and profile payloads mirror src/providers/claude.ts.
+ * Shapes as of: 1891a32 (2026-09-28). Not compared with the live provider
+ * since; update this line when a canary run confirms or corrects them.
+ * Drift signal: the manual pre-release canary's login plus one model request.
  */
 import type { TestContext } from 'node:test'
 /**
