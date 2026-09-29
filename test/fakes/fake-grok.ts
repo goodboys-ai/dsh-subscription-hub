@@ -30,13 +30,18 @@
  * pre-release canary.
  */
 import type { TestContext } from 'node:test'
-import {
-  GROK_API_URL,
-  GROK_BILLING_URL,
-  GROK_CLI_MODELS_URL,
-  GROK_DISCOVERY_URL,
-  GROK_MODELS_URL,
-} from '../../src/providers/grok.js'
+/**
+ * Endpoint URLs as independent literals — deliberately NOT imported from
+ * src/providers/grok.js. This fake is a fixture of the provider's HTTP
+ * surface: routing on the code's own constants would let an accidental URL
+ * change stay green on both sides. If a literal below drifts from the real
+ * constant, requests miss the router and fail loudly with 404.
+ */
+const GROK_API_URL = 'https://api.x.ai/v1/responses'
+const GROK_BILLING_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits'
+const GROK_CLI_MODELS_URL = 'https://cli-chat-proxy.grok.com/v1/models'
+const GROK_DISCOVERY_URL = 'https://auth.x.ai/.well-known/openid-configuration'
+const GROK_MODELS_URL = 'https://api.x.ai/v1/models'
 import { mintFakeJwt } from './fake-codex.js'
 
 /** Endpoints the fake discovery document advertises (x.ai, as the real code requires). */

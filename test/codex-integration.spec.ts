@@ -9,8 +9,8 @@
  * and CodexAdapter.stream() through the SSE translator.
  *
  * Honest boundary: green here proves OUR side of the provider contract. It
- * cannot detect the provider changing their site — that is
- * scripts/probe-providers.mjs plus the manual canary (L4).
+ * cannot detect the provider changing their site — that is the manual
+ * pre-release canary (see docs/testing.md).
  */
 import { test, type TestContext } from 'node:test'
 import assert from 'node:assert/strict'

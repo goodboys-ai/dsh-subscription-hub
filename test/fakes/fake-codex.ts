@@ -21,20 +21,27 @@
  *
  * What this proves: our side of the contract (form encoding, claim paths,
  * refresh grants, SSE translation). What it cannot prove: that the real
- * provider still honors the contract — see scripts/probe-providers.mjs.
+ * provider still honors the contract — that is the manual pre-release
+ * canary (see docs/testing.md).
  *
  * To add a virtual provider for another route, copy this file's structure:
- * a router keyed on that provider's endpoint constants plus helpers minting
+ * a router keyed on that provider's endpoint URLs as independent literals
+ * (never imported from src — see the note above) plus helpers minting
  * whatever credentials its session parser requires.
  */
 import type { TestContext } from 'node:test'
-import {
-  CODEX_API_URL,
-  CODEX_AUTHORIZE_URL,
-  CODEX_MODELS_URL,
-  CODEX_TOKEN_URL,
-  CODEX_USAGE_URL,
-} from '../../src/providers/codex.js'
+/**
+ * Endpoint URLs as independent literals — deliberately NOT imported from
+ * src/providers/codex.js. This fake is a fixture of the provider's HTTP
+ * surface: routing on the code's own constants would let an accidental URL
+ * change stay green on both sides. If a literal below drifts from the real
+ * constant, requests miss the router and fail loudly with 404.
+ */
+const CODEX_API_URL = 'https://chatgpt.com/backend-api/codex/responses'
+const CODEX_AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize'
+const CODEX_MODELS_URL = 'https://chatgpt.com/backend-api/codex/models'
+const CODEX_TOKEN_URL = 'https://auth.openai.com/oauth/token'
+const CODEX_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage'
 
 const b64url = (value: unknown): string =>
   Buffer.from(JSON.stringify(value)).toString('base64url')

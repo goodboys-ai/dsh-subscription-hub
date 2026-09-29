@@ -27,15 +27,20 @@
  * pre-release canary.
  */
 import type { TestContext } from 'node:test'
-import {
-  COPILOT_API_URL,
-  COPILOT_DEVICE_CODE_URL,
-  COPILOT_DEVICE_TOKEN_URL,
-  COPILOT_MODELS_URL,
-  COPILOT_TOKEN_URL,
-  GITHUB_USER_URL,
-  VSCODE_RELEASES_URL,
-} from '../../src/providers/copilot.js'
+/**
+ * Endpoint URLs as independent literals — deliberately NOT imported from
+ * src/providers/copilot.js. This fake is a fixture of the provider's HTTP
+ * surface: routing on the code's own constants would let an accidental URL
+ * change stay green on both sides. If a literal below drifts from the real
+ * constant, requests miss the router and fail loudly with 404.
+ */
+const COPILOT_API_URL = 'https://api.githubcopilot.com/chat/completions'
+const COPILOT_DEVICE_CODE_URL = 'https://github.com/login/device/code'
+const COPILOT_DEVICE_TOKEN_URL = 'https://github.com/login/oauth/access_token'
+const COPILOT_MODELS_URL = 'https://api.githubcopilot.com/models'
+const COPILOT_TOKEN_URL = 'https://api.github.com/copilot_internal/v2/token'
+const GITHUB_USER_URL = 'https://api.github.com/user'
+const VSCODE_RELEASES_URL = 'https://update.code.visualstudio.com/api/releases/stable'
 
 export const FAKE_COPILOT_IDENTITY = {
   login: 'virtual-tester',
