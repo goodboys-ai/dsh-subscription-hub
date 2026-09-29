@@ -1,9 +1,16 @@
 # Testing strategy
 
-Five layers. Each catches a failure class the ones below it cannot. The honest
-premise: **mocked unit tests prove our logic; they cannot prove the providers
-still behave the way we recorded.** The layers above exist to close that gap
-as far as automation can, and to say plainly where it can't.
+Four automated layers, plus a manual pre-release canary. Each layer catches
+a failure class the ones below it cannot. The honest premise: **mocked unit
+tests prove our logic; they cannot prove the providers still behave the way
+we recorded.** The layers above exist to close that gap as far as automation
+can, and to say plainly where it can't.
+
+Commands vs layers: L0 and L3 share one command — `pnpm test` runs every spec
+in `test/`, including the virtual-provider integration specs. L3 is a coverage
+category (the provider-contract specs and their fakes), not a separate lane;
+L0 is the whole run. L1 and L2 are separate commands because they install and
+boot a real DSH.
 
 ## L0 — Unit tests (have)
 
@@ -110,19 +117,28 @@ server.
 
 Two honest boundaries, documented in the specs and fakes:
 
-- **Cursor model streaming is not covered.** Cursor's generation transport
-  speaks ConnectRPC over a raw `node:http2` session
-  (`/agent.v1.AgentService/Run`), which a fetch-level mock cannot intercept —
-  faking it would mean reimplementing the framing protocol instead of testing
-  our code. Cursor's fetch-level contract (browser-login poll, token refresh,
-  usage, protobuf model discovery) is fully covered.
+- **Cursor generation is covered at the adapter layer, not the socket
+  layer.** Cursor's generation transport speaks ConnectRPC over a raw
+  `node:http2` session (`/agent.v1.AgentService/Run`), which a fetch-level
+  mock cannot intercept. The specs inject a canned `createAgentRun` instead:
+  the real `CursorCompatAdapter.stream()` drives a fake run that yields
+  protobuf-encoded server frames (built with a test-local writer whose field
+  numbers are literals read from the vendored decoders). This proves the
+  adapter logic that is ours — model remapping, tool-message projection,
+  frame-to-chunk translation, usage accounting — and asserts the remapped
+  model id and projected messages reach the request bytes. It does not prove
+  the HTTP/2 framing, TLS, or the real Cursor server: those stay with the
+  manual pre-release canary. Cursor's fetch-level contract (browser-login
+  poll, token refresh, usage, protobuf model discovery) is fully covered.
 - **Grok's OIDC discovery is module-cached** with no reset hook, so only the
   first test in the file observes the discovery fetch; the spec asserts it
   there rather than in a standalone order-dependent test.
 
 To add a virtual provider for a future route, copy the pattern in
-`test/fakes/fake-codex.ts`: a router keyed on that provider's endpoint
-constants, plus helpers minting whatever credentials its session parser
+`test/fakes/fake-codex.ts`: a router keyed on that provider's endpoint URLs
+written as independent literals — deliberately not imported from the
+production source, so the fake can disagree with the code when the provider
+drifts — plus helpers minting whatever credentials its session parser
 requires; reuse the real `FlowSpec` for the authorize step; then add
 `test/<provider>-integration.spec.ts` following the existing specs'
 structure: login → refresh → usage → models → stream.

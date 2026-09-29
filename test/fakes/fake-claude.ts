@@ -27,14 +27,19 @@
  * still honors the contract — that is the manual pre-release canary.
  */
 import type { TestContext } from 'node:test'
-import {
-  CLAUDE_API_URL,
-  CLAUDE_AUTHORIZE_URL,
-  CLAUDE_MODELS_URL,
-  CLAUDE_PROFILE_URL,
-  CLAUDE_TOKEN_URL,
-  CLAUDE_USAGE_URL,
-} from '../../src/providers/claude.js'
+/**
+ * Endpoint URLs as independent literals — deliberately NOT imported from
+ * src/providers/claude.js. This fake is a fixture of the provider's HTTP
+ * surface: routing on the code's own constants would let an accidental URL
+ * change stay green on both sides. If a literal below drifts from the real
+ * constant, requests miss the router and fail loudly with 404.
+ */
+const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages?beta=true'
+const CLAUDE_AUTHORIZE_URL = 'https://claude.ai/oauth/authorize'
+const CLAUDE_MODELS_URL = 'https://api.anthropic.com/v1/models?beta=true'
+const CLAUDE_PROFILE_URL = 'https://api.anthropic.com/api/oauth/profile'
+const CLAUDE_TOKEN_URL = 'https://claude.ai/v1/oauth/token'
+const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 import { mintFakeJwt } from './fake-codex.js'
 
 export const FAKE_CLAUDE_IDENTITY = {

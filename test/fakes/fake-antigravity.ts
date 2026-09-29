@@ -32,12 +32,17 @@
  * Google still honors the contract — that is the manual pre-release canary.
  */
 import type { TestContext } from 'node:test'
-import {
-  ANTIGRAVITY_AUTHORIZE_URL,
-  ANTIGRAVITY_DEFAULT_BASE_URL,
-  ANTIGRAVITY_TOKEN_URL,
-  ANTIGRAVITY_USERINFO_URL,
-} from '../../src/providers/antigravity.js'
+/**
+ * Endpoint URLs as independent literals — deliberately NOT imported from
+ * src/providers/antigravity.js. This fake is a fixture of the provider's HTTP
+ * surface: routing on the code's own constants would let an accidental URL
+ * change stay green on both sides. If a literal below drifts from the real
+ * constant, requests miss the router and fail loudly with 404.
+ */
+const ANTIGRAVITY_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+const ANTIGRAVITY_DEFAULT_BASE_URL = 'https://daily-cloudcode-pa.googleapis.com'
+const ANTIGRAVITY_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const ANTIGRAVITY_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
 
 export const FAKE_ANTIGRAVITY_IDENTITY = {
   email: 'virtual-antigravity@example.invalid',
