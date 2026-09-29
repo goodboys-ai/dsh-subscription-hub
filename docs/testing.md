@@ -127,12 +127,15 @@ structure: login → refresh → usage → models → stream.
 
 Catches: regressions in *our* flow logic — broken form encoding, claim-path
 drift in our parsers, mishandled refresh grants, SSE translation bugs. It
-proves the plugin's side of the contract against a faithful fake.
+proves the plugin's side of the contract against a faithful fake. The
+strategy, its alternatives, and its honest boundaries are recorded in the
+[virtual-provider fakes](../.agents/notes/implemented/provider/2026-09-29-virtual-provider-fakes.md)
+agent note.
 
 **It does not prove the provider still honors the contract.** A fake can only
 replay what we recorded. When the provider changes their site, these tests
-stay green and the plugin breaks in production. That is the fundamental
-tension, and it is handled by the manual canary below, not by more fakes.
+stay green and the plugin breaks in production. That gap is handled by the
+manual canary below, not by more fakes.
 
 ## Pre-release canary (manual — not a test layer)
 
@@ -141,9 +144,10 @@ drift has no automated coverage by design. The backstop is manual: before
 tagging a release, log in once per provider in an isolated profile and run
 one model request — exactly the "use it to know" step. The README's
 migration-status notes record which providers have had a live canary on the
-current DSH line. (An automated drift monitor was built and then removed:
-probing token endpoints looks like abusive traffic to the provider, and
-metadata-only monitoring wasn't worth its upkeep next to the canary.)
+current DSH line. (An automated drift monitor was built and then removed;
+the rationale is in the
+[drop-L4](../.agents/notes/implemented/testing/2026-09-29-drop-l4.md) agent
+note.)
 
 ## What "tested" means in the compatibility table
 
