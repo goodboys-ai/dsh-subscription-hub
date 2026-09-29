@@ -159,17 +159,18 @@ manual canary below, not by more fakes.
 
 Automated tests never touch production provider servers, so provider-side
 drift has no automated coverage by design. The backstop is manual: before
-tagging a release, log in once per provider in an isolated profile and run
-one model request — exactly the "use it to know" step. The README's
-migration-status notes record which providers have had a live canary on the
-current DSH line. (An automated drift monitor was built and then removed.)
+tagging a release, use an isolated profile on each supported DSH version,
+log in to each subscription provider, read usage where available, and run
+one model request per provider. Also check the usage-only sources and any
+changed provider tools. The README's verification status summarizes live
+checks and remaining gaps.
 
 ## What "tested" means in the compatibility table
 
 A ✅ in `docs/compatibility.md` means the full gate (L0 + L1 + L2) was green
 on that DSH version. L3 runs in the same `pnpm test` invocation, so it's included.
-Provider canary status is recorded separately in the README migration notes
-per provider.
+Provider canary status is summarized separately in the README verification
+status.
 
 ## Credentials policy for tests
 

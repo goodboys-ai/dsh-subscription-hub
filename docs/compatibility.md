@@ -1,8 +1,8 @@
 # Compatibility policy
 
 How this plugin tracks DeepSeek Harness (DSH) releases: which versions are
-supported, what "supported" means, how the plugin itself is versioned, and the
-release process when a new DSH version lands.
+supported, what "supported" means, how the plugin itself is versioned, and
+how a plugin release is published.
 
 ## Support window
 
@@ -16,10 +16,12 @@ window; the CI matrix and the table below derive from it.
 
 One release covers the whole window: the `@deepseek-ai/*`
 `peerDependencies` are **an exact-version disjunction** listing exactly the
-gated versions (currently `0.1.7-rc.2 || 0.2.0-rc.1`). A disjunct is appended
-only after the full gate goes green on that DSH version, and removed when
-the window drops it. The `devDependencies` stay pinned exact at the window
-floor, so the build never uses APIs newer than the oldest supported DSH.
+gated versions (currently `0.1.7-rc.2 || 0.2.0-rc.1`). Add a candidate
+disjunct and its `dsh-versions.txt` entry in the same PR, then merge only
+after the full gate passes on every listed version. Remove a disjunct when
+the window drops that version. The `devDependencies` stay pinned exact at
+the window floor, so the build never uses APIs newer than the oldest
+supported DSH.
 CI packs exactly one tarball from those pinned dependencies and boots that
 same tarball on every DSH version in the window — there is no per-version
 artifact. When the window gains a version, the disjunction gains a disjunct;
@@ -55,10 +57,10 @@ it and issues against it are closed as "upgrade or pin".
 
 ## Compatibility table
 
-Plugin `0.1.0`, peers `0.1.7-rc.2 || 0.2.0-rc.1`. Gate results below are from
-local runs on 2026-09-29; the CI matrix runs the identical gates on every
-push. A cell becomes ✅ only from a green gate run, never from "it should
-work".
+Current source version `0.1.0`, peers `0.1.7-rc.2 || 0.2.0-rc.1`. Gate
+results below are from local runs on 2026-09-29; the CI matrix runs the
+identical gates on every push. A cell becomes ✅ only from a green gate run,
+never from "it should work".
 
 | DSH | build | tests | L1 contract | L2 boot smoke | Notes |
 |-----|-------|-------------|-------------|---------------|-------|
@@ -70,52 +72,71 @@ tarball (no `node_modules`) and requested the client bundle as JavaScript.
 
 ## Plugin versioning
 
-Plain semver for the plugin itself (`0.1.0`, `0.1.1`, …). Because the peers
-are a disjunction listing exactly the gated versions, the plugin version
-does **not** need to track the DSH minor line — one release installs across
-the whole window, and the CI matrix proves it on each version. When the
-window slides, the disjunction gains or loses a disjunct (a minor chore, not
-a release line).
+The plugin uses semver independently of DSH (`0.1.0`, `0.1.1`, …). During the
+`0.x` series, use a patch for compatible fixes or DSH support expansion that
+keeps the old window, and a minor for a new provider, a breaking setting, or
+dropped DSH support. A peer-window change still requires a new plugin
+version and tag; it does not create one plugin release line per DSH minor. The
+current source version `0.1.0` targets both DSH `0.1.7-rc.2` and
+`0.2.0-rc.1`, so its minor version cannot identify one DSH minor. The exact
+peers and CI matrix state host compatibility; plugin patches can ship between
+DSH releases.
 
-Every release gets a git tag (`v0.1.0`), and users pin with it:
+Every release tag matches `package.json` (`v0.1.0` for version `0.1.0`). Once
+that tag is published, users can pin with it:
 
 ```sh
 dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#v0.1.0
 ```
 
-That tag is the **downgrade path** — DSH itself offers no downgrade tooling,
-so keeping old tags installable is part of the support contract.
+That tag is the **downgrade path** — DSH itself offers no downgrade tooling.
+Never move or reuse a release tag. Protect `v*` tags against updates and
+deletion with a GitHub [tag ruleset](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository)
+or [immutable releases](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/prevent-release-changes)
+before the first release.
 
 Branch strategy: `main` always tracks the newest DSH in the window.
 Maintenance branches per DSH minor line are cut only when someone actually
 needs a fix on an old line that the current range no longer covers; they are
 not pre-created.
 
-## Release process for a new DSH version
+## Release process
 
-1. **Detect.** The release-watch job reports a new DSH release (or you notice it).
-2. **Window.** Add the new version to `dsh-versions.txt`; drop the oldest if the
-   window now holds more than three.
-3. **Disjunction check.** If the new version is not already a disjunct in
-   the peer disjunction, append it — but only after step 4 is green for it.
-   The disjunction is a promise; don't extend a promise you haven't
-   verified.
-4. **Gate.** CI must be green on every version in the window: per-version
-   build + tests + L1 on each, and L2 booting the single packed tarball on
-   each. If the newest fails, fix forward (compat shims live in
-   `src/compat.ts`); if an old one fails and the fix is disproportionate,
-   shrink the window (and the disjunction) and say so in the table notes.
-5. **Document.** Update the compatibility table above; a new ✅ needs a green
-   run, not optimism.
-6. **Tag.** Merge, tag `vX.Y.Z`, push the tag. GitHub installs from the tag are
-   immediately usable.
+1. **Prepare a PR.** Set the intended plugin version in `package.json` and
+   draft release notes. Update the README and compatibility table for changed
+   behavior. When adding a DSH RC, update `dsh-versions.txt` and the exact
+   peer disjunction together in this PR. Drop the oldest RC if the window
+   exceeds three minor lines, and move the pinned dev dependencies and
+   lockfile to the new floor when the old floor leaves. There is no
+   release-watch job; check DSH releases manually until one is added.
+2. **Run the gate.** Require the PR's `CI gate`: per-version build, tests,
+   and L1 contract checks, plus L2 boot of one packed tarball on every
+   listed DSH version. If a version fails, fix the plugin or narrow the
+   window and peers in the PR. Record a new ✅ in the compatibility table
+   only after its gate passes.
+3. **Check live behavior.** Run the [manual canary](testing.md#pre-release-canary-manual--not-a-test-layer)
+   from the PR commit in isolated profiles on each supported DSH version.
+   Record provider login, usage, and a model request; check usage-only sources
+   and changed tools too. If live checks remain open, use a plugin prerelease
+   version and state the gaps in its GitHub Release.
+4. **Check the merge commit.** Merge through a PR and confirm its CI gate.
+   Install GitHub source from the merge commit SHA in an isolated profile at
+   least once: CI boots a packed tarball, while a GitHub source install runs
+   `prepare`. If this fails, fix it through another PR before tagging.
+5. **Publish from `main`.** Create `vX.Y.Z` at the checked merge commit and
+   publish a GitHub Release with the supported DSH versions, completed live
+   checks, known limits, and pinned install command. Mark prerelease versions
+   as GitHub prereleases. Keep `private: true` in `package.json`; users
+   install from GitHub source, not npm. This process is manual today; no
+   release workflow publishes tags or assets.
 
 ## What this policy deliberately does not promise
 
 - **Provider-side changes.** When ChatGPT, Claude, Grok, Copilot, Antigravity,
   or Cursor change their login or API surface, the plugin can break on *every*
-  DSH version at once. That's caught by the manual pre-release canary and the
-  virtual-provider tests (see `docs/testing.md`), not by the DSH matrix.
+  DSH version at once. Neither the DSH matrix nor offline virtual-provider
+  tests detect provider-side drift. The manual canary in
+  [testing.md](testing.md) checks live behavior before a release.
 - **Forward compatibility.** A new DSH RC can break the plugin; the policy
   guarantees a *process* (detect → bump → gate → tag), not that `main` works
   on a DSH released yesterday.
