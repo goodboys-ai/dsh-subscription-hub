@@ -21,10 +21,13 @@ The six DSH peers — `@deepseek-ai/dsh-attachment`, `dsh-credentials`,
 **exact-version disjunction** (`0.1.7-rc.2 || 0.2.0-rc.1`), not a range and
 not an exact pin. Two companion rules keep the disjunction honest:
 
-- A disjunct is appended only after the full gate (build + test suite + L1
-  host-export check + L2 boot smoke) goes green on that DSH version, and
-  removed when the support window drops it. The disjunction therefore lists
-  exactly the gated versions — no more, no fewer.
+- A disjunct reaches `main` only after the full gate (build + test suite +
+  L1 host-export check + L2 boot smoke) goes green on that DSH version, and
+  is removed when the support window drops it. The PR that adds the version
+  to `dsh-versions.txt` adds the disjunct too, because L2 cannot install the
+  tarball on a DSH version its peers reject; that PR merges only when green.
+  The disjunction on `main` therefore lists exactly the gated versions — no
+  more, no fewer.
 - `devDependencies` stay pinned **exact at the window floor** (`0.1.7-rc.2`),
   so the build never uses APIs newer than the oldest supported DSH. Only
   packages whose pin is a DSH prerelease move per matrix version;
@@ -56,7 +59,7 @@ and the compatibility table in `docs/compatibility.md` mirrors it.
   and silently extends the promise every time DSH ships — the declaration
   would claim compatibility by default instead of by evidence. A
   disjunction forces a conscious, gated decision per version: detect the new
-  RC, run the gate, append the disjunct, tag.
+  RC, propose its disjunct, run the gate, merge, tag.
 - **`dsh plugin allow-version` exemption as the strategy.** A user-side
   escape hatch for installing despite a peer mismatch. Useful for
   experimenting with an ungated DSH, but it pushes version judgment onto
@@ -67,7 +70,7 @@ and the compatibility table in `docs/compatibility.md` mirrors it.
 
 One release installs across the whole window, and the plugin version no
 longer tracks DSH minor lines. Supporting a new DSH RC is a process —
-detect → gate → append disjunct → tag — never optimism. The cost is
+detect → propose disjunct → gate → merge → tag — never optimism. The cost is
 discipline: the disjunction is only as honest as the gate behind it, which
 is why L2 installs the packed tarball on every listed version rather than
 trusting the package manager's solver. If the window ever needs narrowing
