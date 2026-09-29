@@ -51,6 +51,10 @@ trap cleanup EXIT
 
 fail() {
   echo "SMOKE FAIL: $1" >&2
+  if [[ -f "$SMOKE_HOME/plugin-add.log" ]]; then
+    echo "--- plugin-add.log tail ---" >&2
+    tail -80 "$SMOKE_HOME/plugin-add.log" >&2 || true
+  fi
   if grep -qi "incompatible with dsh" "$SMOKE_HOME/plugin-add.log" 2>/dev/null; then
     echo "hint: the plugin's @deepseek-ai/* peer pins don't match DSH $DSH_VERSION." >&2
     echo "hint: bump the pins per docs/compatibility.md, or test against the DSH version they pin." >&2

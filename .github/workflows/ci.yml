@@ -104,6 +104,9 @@ jobs:
         dsh: ${{ fromJson(needs.versions.outputs.dsh) }}
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
       - uses: actions/setup-node@v7
         with:
           node-version: 24
