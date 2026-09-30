@@ -23,7 +23,7 @@ the repo was derived from a full upstream clone — so `git fetch upstream
 shipped. Each commit in the delta is then either cherry-picked (files intact
 on both sides) or re-implemented (files the fork rewrote; only the intent
 ports). The baseline, the ported commits, and the deliberately skipped ones
-are recorded in [docs/upstream-sync.md](../../docs/upstream-sync.md), which
+are recorded in [docs/upstream-sync.md](../../../../docs/upstream-sync.md), which
 is updated in the same PR as the port. The first port under this policy is
 upstream `f6e1b3f` (Settings shows the CLI version Codex and Claude present,
 with its source), fixing upstream issue #108.
@@ -47,6 +47,7 @@ baseline moves; their header comment names the tag they match.
   community lands the fixes first. Untracked drift shows up as user-visible
   bugs (a failed npm lookup reading as a plan limit, an empty credential
   poisoning the store) that upstream already fixed.
+
 ## Consequences
 
 Each upstream release costs one classification pass over

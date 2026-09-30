@@ -17,14 +17,15 @@ though, and this repo tracks them selectively.
   failed npm lookup no longer masquerades as a plan limit
   (upstream issue [#108](https://github.com/V1ki/dsh-plugin-subscriptions/issues/108)).
 - **Deliberately untracked:** `d8ab13e91fd6747e419a1f5e965bce42bdfc3ad8`
-  (the v0.9.6 release chore: version bump plus README notes for the feature
-  above). Release mechanics live in this repo's own CI.
+  (the v0.9.6 release chore: a `package.json` version bump). Release
+  mechanics live in this repo's own CI.
 
 ## How the baseline was determined
 
 1. `docs/upstream-README.md` is a snapshot of upstream's README; it diffs
-   smallest against the `v0.9.5` tag (16 changed lines, all the fork's own
-   edits: the proxy-section replacement and peer-range notes).
+   smallest against the `v0.9.5` tag (11 changed lines: one added header
+   comment, one `web_search` wording line, and the Proxy section replaced
+   by the fork's Network routing note).
 2. `src/auth/store.ts` and `src/client/fast-command.ts` in this repo are
    byte-identical to upstream at `v0.9.5`; every other shared file differs
    only by the fork's mechanical renames (`proxiedFetch` → `hostFetch`,

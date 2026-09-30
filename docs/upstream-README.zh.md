@@ -1,3 +1,4 @@
+<!-- 上游 V1ki/dsh-plugin-subscriptions README.zh.md 在 v0.9.5（75a8346，2026-09-28）的快照，含本分叉的修改。同步状态见 docs/upstream-sync.md。 -->
 # dsh-plugin-subscriptions [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 [English](README.md) | 中文
