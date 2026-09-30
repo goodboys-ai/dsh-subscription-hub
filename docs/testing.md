@@ -294,6 +294,13 @@ script:
      other section. The badge fills the dialog from RPCs that settle at
      their own pace, so the driver polls until it matches, and after a
      deadline fails on what the dialog then shows;
+   - the plugin's settings section renders inside the host's settings
+     panel: the panel opens from the host's settings trigger, the nav lists
+     the Subscriptions entry, and the section body shows the intro copy,
+     one card per fixture-signed-in provider, the Cursor and built-in
+     provider usage cards, and the status-bar quota display control with
+     its two options. Flipping that control to Hidden persists to
+     localStorage, and after a page reload the control still reads Hidden;
    - no slot rendered its crash face (`data-slot-error`), the console shows
      no `slot entry crashed in` or `HOST_CONTRACT_MISS` line, the page threw
      no uncaught exception, and the page requested nothing outside loopback.
@@ -337,10 +344,13 @@ The fixture values the preload serves and the driver expects live in one
 module, `scripts/host-e2e-fixture.mjs`, so they cannot drift apart.
 
 Catches: a host change that hides the model, breaks streaming into the
-transcript, stops the usage bar from rendering in the stats row, or makes a
-slot entry crash; a usage RPC or dialog row that shows the wrong account or
-source; and a request, from the server or the page, that the plugin started
-making without a planned fixture.
+transcript, stops the usage bar from rendering in the stats row, makes a
+slot entry crash, or leaves the plugin's settings section unrendered in the
+host's settings panel; a usage RPC or dialog row that shows the wrong
+account or source; a settings control whose copy drifts from the locale
+dictionary or whose preference write does not survive a reload; and a
+request, from the server or the page, that the plugin started making
+without a planned fixture.
 
 It does not prove: live provider behavior, Cursor generation (raw HTTP/2,
 refused here), or UI paths other than the ones above. Login flows are covered
@@ -473,12 +483,6 @@ each limit honest.
   `div[role="dialog"][aria-modal="true"]:has(> nav)` in
   `src/client/index.ts` — is invisible to both, and a host change there
   fails no check.
-- **The host E2E never opens the host's Settings page.** The driver's
-  browser pass covers the model picker, one streamed Codex reply, the usage
-  pill, and the usage dialog. The plugin's settings section
-  (`ctx.slots.inject('settings.section', …)` in `src/client/index.ts`) is
-  registered and its slot name is contract-checked, but no assertion renders
-  the section against a real host.
 - **The unit suite runs in Node, not in a browser DOM.** `pnpm test` is
   `node --test` over the compiled specs; no jsdom or happy-dom stands in for
   the host page. The browser fixtures under `test/` (for example
