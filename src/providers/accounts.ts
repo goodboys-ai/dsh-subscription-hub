@@ -226,7 +226,7 @@ export class AccountTokenManager<S extends TimedSession> {
   /** The logged-out error, mirroring TokenManager's own message. */
   private missingCredential(): LlmError {
     return new LlmError(
-      `dsh-subscription-hub: not logged in to ${this.options.displayName}; `
+      `dsh-subscriptions: not logged in to ${this.options.displayName}; `
       + 'log in via Settings → Subscriptions in the dsh web app',
       'MISSING_CREDENTIAL',
     )

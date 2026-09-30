@@ -13,7 +13,7 @@
  * adapter contributes one {@link RateLimitResetReader} built from the parsing
  * primitives here.
  *
- * @module dsh-subscription-hub/providers/rate-limit
+ * @module dsh-subscriptions/providers/rate-limit
  */
 
 import { resolveRetryPolicy } from '@deepseek-ai/dsh-llm'

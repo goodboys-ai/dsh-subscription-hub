@@ -20,7 +20,7 @@
  */
 
 /** Prefix of the console warning the client logs when a host lacks a listed name. */
-export const HOST_CONTRACT_MISS = 'dsh-subscription-hub: host contract miss'
+export const HOST_CONTRACT_MISS = 'dsh-subscriptions: host contract miss'
 
 export const HOST_CONTRACT = {
   /**

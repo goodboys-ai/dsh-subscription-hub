@@ -267,7 +267,7 @@ jobs:
           FAILED: ${{ steps.verdict.outputs.failed }}
         run: |
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          title="Nightly: DSH $DSH_VERSION breaks dsh-subscription-hub"
+          title="Nightly: DSH $DSH_VERSION breaks dsh-subscriptions"
           # Search matches title words, so rc.2 would also find an rc.3 issue;
           # only an issue with this exact title is the same break.
           existing="$(TITLE="$title" gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number,title --jq '[.[] | select(.title == env.TITLE)][0].number // empty')"

@@ -141,13 +141,15 @@ jobs:
           gh release create "${TAG}" --repo "${REPO}" --title "${TAG}" --notes-file notes.md ${prerelease_flag}
 
   # npm publishing via OIDC trusted publishing — no tokens anywhere. The
-  # trusted publisher is configured on npmjs.com for repo
-  # goodboys-ai/dsh-subscription-hub + workflow release.yml + no environment;
+  # trusted publisher must be configured on npmjs.com for package
+  # dsh-subscriptions + repo goodboys-ai/dsh-subscription-hub + workflow
+  # release.yml + no environment (after the first manual publish below);
   # a mismatch there fails the publish with E404/E403 (see
-  # docs/compatibility.md). Runs in parallel with `release` so an npm failure
-  # never blocks the GitHub Release; recovery is re-running just this job.
-  # The first publish ever is manual (npm requires the package to exist
-  # before a trusted publisher can be configured); the idempotency check
+  # docs/compatibility.md). Runs in parallel with `release`
+  # so an npm failure never blocks the GitHub Release; recovery is re-running
+  # just this job. The first publish of a new package name is manual (npm
+  # requires the package to exist before a trusted publisher can be
+  # configured); the idempotency check
   # below skips versions npm already has.
   npm-publish:
     name: Publish to npm
@@ -178,15 +180,16 @@ jobs:
         run: |
           set -euo pipefail
           v="$(node -p "require('./package.json').version")"
+          n="$(node -p "require('./package.json').name")"
           stdout_file="$(mktemp)"
           stderr_file="$(mktemp)"
           exit_code=0
-          npm view "@goodboys-ai/dsh-subscription-hub@${v}" version >"$stdout_file" 2>"$stderr_file" || exit_code=$?
+          npm view "${n}@${v}" version >"$stdout_file" 2>"$stderr_file" || exit_code=$?
           if [ "$exit_code" -eq 0 ] && [ "$(cat "$stdout_file")" = "${v}" ]; then
-            echo "npm already has @goodboys-ai/dsh-subscription-hub@${v}; skipping publish."
+            echo "npm already has ${n}@${v}; skipping publish."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           elif [ "$exit_code" -ne 0 ] && grep -qiE 'E404|Not Found' "$stderr_file"; then
-            echo "npm does not have ${v}; proceeding."
+            echo "npm does not have ${n}@${v}; proceeding."
           else
             echo "::error::npm view failed unexpectedly (exit ${exit_code}): $(cat "$stderr_file")"
             exit 1

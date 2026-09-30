@@ -10,7 +10,7 @@ import { defineConfig } from 'tsdown'
 import clientConfig from './tsdown.config.ts'
 
 export default defineConfig([{
-  name: 'dsh-subscription-hub',
+  name: 'dsh-subscriptions',
   entry: { index: 'src/index.ts' },
   outDir: 'lib',
   format: ['esm'],
