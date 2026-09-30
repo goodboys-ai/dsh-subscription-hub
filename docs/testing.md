@@ -142,11 +142,14 @@ profiles), installs this plugin into the `web` profile with `dsh plugin add`,
 boots `dsh web --no-open --port 0`, and asserts:
 
 - the plugin installs. This is a real gate: DSH's plugin manager enforces
-  `@deepseek-ai/*` peer versions at install time. With exact `0.1.7-rc.2`
-  peers, installing on `0.2.0-rc.1` was *rejected* unless the user granted a
-  `dsh plugin allow-version` exemption; with the exact-version disjunction
-  (`0.1.7-rc.2 || 0.2.0-rc.1`, see `docs/compatibility.md`) the same release
-  installs across the window;
+  `@deepseek-ai/*` peer versions at install time (semver with
+  `includePrerelease`; an out-of-range host is rejected unless the user
+  grants an exact `dsh plugin allow-version` exemption). The bounded peer
+  range (`>=0.1.7-rc.2 <0.3.0-0`, see `docs/compatibility.md`) admits the
+  whole support window, so the same release installs on every gated
+  version. (Dated evidence: with exact `0.1.7-rc.2` peers, installing on
+  `0.2.0-rc.1` was *rejected* on 2026-09-29; the range form was verified
+  to install on all three gated versions on 2026-09-30.);
 - the web UI completes its trust handshake: the printed `?token=` URL is
   single-use (first GET → 303 + session cookie), then the app page answers
   HTTP 200 with the cookie;
@@ -372,8 +375,9 @@ surfaces as a job failure without an issue rather than as a false break.
   [Test order](#test-order)).
 - **next-host**: the newest DSH on npm when it is not yet in
   `dsh-versions.txt`; a version already there is skipped, because CI covers
-  it. The release tarball's exact peers would refuse that version, so the
-  job packs a nightly-only tarball whose peers also admit it. Its checks
+  it. When the candidate sits outside the peer range (below the floor or on
+  a newer minor line), the release tarball would be refused, so the job
+  packs a nightly-only tarball whose peers also admit it. Its checks
   answer "would the plugin work if this version joined the window?", not
   "does the release install on it". It runs the host-export check, host
   contract check, boot smoke, and host E2E, each even when an earlier one

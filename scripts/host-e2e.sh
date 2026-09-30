@@ -13,7 +13,7 @@
 # provider request log.
 #
 # Usage:
-#   DSH_VERSION=0.2.0-rc.1 bash scripts/host-e2e.sh
+#   DSH_VERSION=0.2.0-rc.2 bash scripts/host-e2e.sh
 #   PLUGIN_SOURCE=/path/to/plugin.tgz bash scripts/host-e2e.sh   # default: this repo
 #   HOST_E2E_ARTIFACTS=/some/dir bash scripts/host-e2e.sh         # keep evidence here
 #   KEEP_SMOKE_HOME=1 bash scripts/host-e2e.sh                    # keep the temp profile
