@@ -27,6 +27,30 @@ test('Kimi Code resolves the credential name used by the DSH base install', asyn
   assert.ok(!JSON.stringify(await controller.status()).includes('kimi-secret'))
 })
 
+test('Kimi Code usage sends the resolved key to the Kimi usages endpoint', async () => {
+  let calls = 0
+  const http = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls += 1
+    assert.equal(String(url), 'https://api.kimi.com/coding/v1/usages')
+    assert.equal((init?.headers as Record<string, string>).authorization, 'Bearer kimi-secret')
+    return Response.json({ usages: {
+      limit_7d: { usedRatio: 0.25, resetAt: '2026-10-01T00:00:00Z' },
+    } })
+  }) as typeof fetch
+  const controller = new ExternalUsageController(async name => {
+    assert.equal(name, 'KIMI_CODING_API_KEY')
+    return { value: 'kimi-secret' }
+  }, http)
+  assert.deepEqual(await controller.usage('kimi-code'), {
+    supported: true,
+    plan: 'Kimi Code',
+    windows: [
+      { kind: 'weekly', usedPercent: 25, resetsAt: Date.parse('2026-10-01T00:00:00Z') },
+    ],
+  })
+  assert.equal(calls, 1)
+})
+
 test('usage-only keys are resolved on every read so DSH credential changes take effect', async () => {
   let key = 'first'
   const headers: string[] = []

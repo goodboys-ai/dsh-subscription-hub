@@ -1,0 +1,912 @@
+#!/usr/bin/env node
+// Host E2E driver: checks the plugin inside a running `dsh web` the way a
+// user meets it. scripts/host-e2e.sh boots the host with the fake profile
+// and the network preload, then runs this script.
+//
+//   node scripts/host-e2e.mjs <origin> <cookie-jar> <seen-log> <artifact-dir>
+//
+// Assertions are about the plugin-host contract:
+//   1. The usage RPCs read the fixture profile and return each source's
+//      canned percentage (`usage`, `cursorUsage`, `externalUsage`).
+//   2. The host's model picker lists the plugin's Codex model.
+//   3. A message to that model streams through the plugin's adapter, and
+//      the canned reply renders in the transcript.
+//   4. The usage pill renders inside the host's stats row
+//      (`data-composer-stats`), and its dialog shows each source's name
+//      with that source's own percentage.
+//   5. No slot entry crashed, no host contract lookup missed, and the page
+//      threw no uncaught exception.
+//   6. Every provider request from the server was a planned fixture
+//      (FIXTURE_REQUESTS, exact method and URL) carrying the fixture
+//      credential, or a planned refusal (EXPECTED_REFUSALS).
+//   7. The page itself requested nothing outside loopback. Chrome runs
+//      without the Node preload, so the driver fences it instead: every
+//      proxied request goes to a dead local port, every hostname other than
+//      localhost fails to resolve, and background networking is off. The
+//      driver lists each non-loopback request the page attempted, from the
+//      CDP Network events, as a page error.
+//
+// Clicking through the host UI to reach those states (onboarding, workspace,
+// model menu) is harness, not assertion. A harness step that fails is
+// retried once in a fresh browser. A failed assertion, or any slot crash or
+// page error seen during the attempt, is a product failure and never
+// retried. Exit 1 is a product failure, exit 2 a harness failure.
+//
+// Evidence in <artifact-dir>: the last RPC answers (rpc/), and for each
+// browser attempt its screenshot, DOM, console, and page requests
+// (browser-attempt-N/). A passing browser attempt saves the same set, so a
+// later seen-log or server-log failure still has the page state to read.
+import { execFileSync, spawn } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+const PAGE_ERRORS = 'the page reported errors'
+/** One RPC round trip; the fixture answers from memory, so this only bounds a hung server. */
+const RPC_TIMEOUT_MS = 15_000
+/** One CDP command or awaited event; bounds a crashed or wedged Chrome. */
+const CDP_TIMEOUT_MS = 30_000
+/**
+ * How long the usage dialog may take to show every fixture value after it
+ * opens. The pill is already on screen by then, so the badge's first usage
+ * poll has run; this only covers the rest of that poll landing.
+ */
+const DIALOG_SETTLE_MS = 10_000
+
+/** A failed assertion about the plugin. Never retried. */
+class ProductFailure extends Error {}
+/** A host UI step the driver could not complete. Retried once. */
+class HarnessFailure extends Error {}
+
+// Exit 1 only for a ProductFailure. Anything else, including an exception
+// that escapes the main try (a stray socket error, a rejected promise
+// nobody awaited), means the run did not check the plugin, so it exits 2
+// and the nightly job opens no issue for it.
+function exitFor(error) {
+  const kind = error instanceof ProductFailure ? 'PRODUCT' : 'HARNESS'
+  console.error(`HOST E2E ${kind} FAILURE: ${error instanceof Error ? error.message : String(error)}`)
+  if (!(error instanceof ProductFailure) && !(error instanceof HarnessFailure) && error instanceof Error) {
+    console.error(error.stack)
+  }
+  console.error(`evidence: ${artifactDir}`)
+  process.exit(error instanceof ProductFailure ? 1 : 2)
+}
+const [origin, jarPath, seenPath, artifactDir] = process.argv.slice(2)
+/** Where the directory-picker fallback creates its workspace; host-e2e.sh removes it. */
+const workspaceRoot = process.env.HOST_E2E_WORKSPACES ?? join(tmpdir(), 'host-e2e-workspaces')
+if (origin === undefined || jarPath === undefined || seenPath === undefined || artifactDir === undefined) {
+  console.error('usage: host-e2e.mjs <origin> <cookie-jar> <seen-log> <artifact-dir>')
+  process.exit(2)
+}
+process.on('uncaughtException', exitFor)
+process.on('unhandledRejection', exitFor)
+
+// Loaded here rather than imported statically, so a missing or unreadable
+// module is a harness failure (exit 2) instead of Node's own exit 1.
+let CODEX_MODEL, CODEX_PILL, CODEX_REPLY, EXPECTED_REFUSALS, FIXTURE_REQUESTS, USAGE_PERCENT
+let HOST_CONTRACT, HOST_CONTRACT_MISS
+
+try {
+  ;({
+    CODEX_MODEL, CODEX_PILL, CODEX_REPLY, EXPECTED_REFUSALS, FIXTURE_REQUESTS, USAGE_PERCENT,
+  } = await import('./host-e2e-fixture.mjs'))
+  // Node strips the types from this dependency-free module; see its header.
+  ;({ HOST_CONTRACT, HOST_CONTRACT_MISS } = await import(join(root, 'src/client/host-contract.ts')))
+  mkdirSync(artifactDir, { recursive: true })
+  const cookies = readCookies(readFileSync(jarPath, 'utf8'))
+  if (cookies.length === 0) throw new HarnessFailure('the session cookie jar is empty')
+  const roster = await waitForFixture(cookies)
+  await checkUsageRpcs(cookies, roster)
+  console.log('ok: usage, cursorUsage, and externalUsage return every fixture percentage')
+  await checkBrowser(cookies)
+  checkSeenLog()
+  console.log('ok: every provider request hit a fixture with the fixture credential or a planned refusal')
+  console.log('HOST E2E PASS')
+} catch (error) {
+  exitFor(error)
+}
+
+// ---------------------------------------------------------------------------
+// RPC checks
+
+function readCookies(text) {
+  const cookies = []
+  for (const line of text.split('\n')) {
+    if (line.length === 0 || line.startsWith('# ')) continue
+    const httpOnly = line.startsWith('#HttpOnly_')
+    const fields = (httpOnly ? line.slice('#HttpOnly_'.length) : line).split('\t')
+    if (fields.length < 7) continue
+    cookies.push({
+      domain: fields[0],
+      path: fields[2],
+      secure: fields[3] === 'TRUE',
+      name: fields[5],
+      value: fields[6],
+      httpOnly,
+    })
+  }
+  return cookies
+}
+
+/** One subscriptions-auth RPC in the browser's envelope; returns `result` (`{ ok, value | error }`). */
+async function rpc(cookies, endpoint, payload) {
+  const response = await fetch(`${origin}/api/subscriptions-auth.${endpoint}`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+    headers: {
+      'content-type': 'application/json',
+      cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; '),
+    },
+    body: JSON.stringify({ type: 'client-request', rpcId: `e2e-${endpoint}`, method: `subscriptions-auth.${endpoint}`, payload }),
+  })
+  const text = await response.text()
+  saveRpc(endpoint, payload, response.status, text)
+  if (!response.ok) throw new ProductFailure(`subscriptions-auth.${endpoint} answered HTTP ${response.status}`)
+  const body = JSON.parse(text)
+  if (/"accessToken"|"refreshToken"|Bearer /.test(JSON.stringify(body))) {
+    throw new ProductFailure(`subscriptions-auth.${endpoint} response includes credential material`)
+  }
+  return body.result
+}
+
+/** Keep the last answer of each RPC call as evidence. */
+function saveRpc(endpoint, payload, status, text) {
+  const dir = join(artifactDir, 'rpc')
+  mkdirSync(dir, { recursive: true })
+  const name = [endpoint, ...Object.values(payload).filter(value => typeof value === 'string')].join('-').replace(/[^\w.-]/g, '_')
+  writeFileSync(join(dir, `${name}.json`), `${JSON.stringify({ payload, status, body: text }, null, 2)}\n`)
+}
+
+/**
+ * Wait until the server reports every fixture account signed in.
+ * @returns the default account key of each OAuth provider.
+ */
+async function waitForFixture(cookies) {
+  const oauth = ['codex', 'claude', 'grok', 'copilot', 'antigravity']
+  let last = 'no answer yet'
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      const status = await rpc(cookies, 'status', {})
+      const external = await rpc(cookies, 'externalStatus', {})
+      const cursor = await rpc(cookies, 'cursorStatus', {})
+      const providers = status?.value?.providers ?? {}
+      const accounts = Object.fromEntries(oauth.map(id => [id, providers[id]?.accounts?.find(a => a.isDefault)?.key]))
+      const signedIn = oauth.every(id => accounts[id] !== undefined)
+      const keys = external?.value?.['opencode-go']?.configured === true && external?.value?.['kimi-code']?.configured === true
+      const cursorIn = cursor?.value?.authenticated === true
+      if (signedIn && keys && cursorIn) return accounts
+      last = `oauth=${JSON.stringify(accounts)} keys=${keys} cursor=${cursorIn}`
+    } catch (error) {
+      if (error instanceof ProductFailure) throw error
+      last = error instanceof Error ? error.message : String(error)
+    }
+    await delay(500)
+  }
+  throw new ProductFailure(`the plugin did not report the fixture profile as signed in (${last})`)
+}
+
+/**
+ * Each usage RPC returns exactly one window, carrying the percentage its own
+ * fixture serves. The fixture gives each source one window and a distinct
+ * percentage, so a window taken from another source or a stray extra window
+ * both fail. Copilot has no usage endpoint.
+ */
+async function checkUsageRpcs(cookies, accounts) {
+  const calls = [
+    ...['codex', 'claude', 'grok', 'antigravity'].map(provider => ({
+      source: provider, endpoint: 'usage', payload: { provider, account: accounts[provider] },
+    })),
+    { source: 'cursor-subscription', endpoint: 'cursorUsage', payload: {} },
+    { source: 'opencode-go', endpoint: 'externalUsage', payload: { source: 'opencode-go' } },
+    { source: 'kimi-coding', endpoint: 'externalUsage', payload: { source: 'kimi-code' } },
+  ]
+  const wrong = []
+  for (const { source, endpoint, payload } of calls) {
+    const result = await rpc(cookies, endpoint, payload)
+    const percents = (result?.value?.windows ?? []).map(window => window.usedPercent)
+    // Equal up to float error only: Antigravity reports 1 - remainingFraction,
+    // so its 44 arrives as 43.99999999999999. A rounded match would let a
+    // wrong 11.4 through as 11.
+    if (result?.ok !== true || result.value.supported !== true || percents.length !== 1
+      || typeof percents[0] !== 'number' || Math.abs(percents[0] - USAGE_PERCENT[source].percent) > 1e-9) {
+      wrong.push(`${endpoint}(${JSON.stringify(payload)}) → ${JSON.stringify(result)}`)
+    }
+  }
+  const copilot = await rpc(cookies, 'usage', { provider: 'copilot', account: accounts.copilot })
+  if (copilot?.ok !== true || copilot.value.supported !== false) {
+    wrong.push(`usage(copilot) should be { supported: false } → ${JSON.stringify(copilot)}`)
+  }
+  if (wrong.length > 0) throw new ProductFailure(`usage RPCs did not return the fixture values:\n  ${wrong.join('\n  ')}`)
+}
+
+// ---------------------------------------------------------------------------
+// Browser checks
+
+async function checkBrowser(cookies) {
+  for (let attempt = 1; ; attempt++) {
+    const evidence = join(artifactDir, `browser-attempt-${attempt}`)
+    try {
+      await withChrome(cookies, evidence, drive)
+      return
+    } catch (error) {
+      if (!(error instanceof HarnessFailure) || attempt === 2) throw error
+      console.log(`retry: harness step failed on attempt ${attempt} (${error.message}); evidence in ${evidence}`)
+    }
+  }
+}
+
+/**
+ * Open the web UI in headless Chrome, run `body`, and save evidence either
+ * way. Console output, page errors, and page requests are collected for the
+ * whole visit.
+ *
+ * Chrome does not load the Node preload, so it gets its own network fence:
+ * every non-loopback request goes to a proxy port nothing listens on, and
+ * host names other than loopback do not resolve. Loopback bypasses the proxy
+ * by Chrome's default rules. The page's attempts are still recorded, and
+ * any attempt fails the run.
+ */
+async function withChrome(cookies, evidence, body) {
+  const chrome = findChrome()
+  const port = await freePort()
+  const deadProxy = await freePort()
+  const profile = mkdtempSync(join(tmpdir(), 'host-e2e-chrome-'))
+  // Chrome leaves scratch dirs (com.google.Chrome.*) in its TMPDIR. Give it
+  // one of its own so the cleanup below removes them. The path stays short
+  // under /tmp: Chrome aborts when its singleton socket path there exceeds
+  // the 108-byte Unix socket limit, which a deep workspace TMPDIR can do.
+  const chromeTmp = mkdtempSync('/tmp/dsh-e2e-chrome-')
+  const child = spawn(chrome, [
+    '--headless=new',
+    `--remote-debugging-port=${port}`,
+    `--user-data-dir=${profile}`,
+    `--proxy-server=http://127.0.0.1:${deadProxy}`,
+    '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1',
+    '--disable-background-networking',
+    '--disable-component-update',
+    '--no-first-run',
+    '--no-sandbox',
+    '--disable-gpu',
+    '--disable-dev-shm-usage',
+    '--lang=en-US',
+    '--window-size=1280,900',
+    'about:blank',
+  ], {
+    stdio: 'ignore',
+    env: { ...process.env, TMPDIR: chromeTmp },
+    // Its own process group: google-chrome is a shell wrapper, and signalling
+    // only the wrapper leaves Chrome writing into the profile being removed.
+    detached: true,
+  })
+  const page = { console: [], exceptions: [], outside: [] }
+  let cdp
+  try {
+    await waitForJson(`http://127.0.0.1:${port}/json/version`)
+    const list = await waitForJson(`http://127.0.0.1:${port}/json/list`)
+    const target = list.find(entry => entry.type === 'page')
+    if (target?.webSocketDebuggerUrl === undefined) throw new HarnessFailure('headless Chrome opened no page')
+    cdp = await connect(target.webSocketDebuggerUrl)
+    cdp.on('Runtime.consoleAPICalled', ({ type, args }) => {
+      page.console.push({ type, text: args.map(arg => arg.value ?? arg.description ?? '').join(' ') })
+    })
+    cdp.on('Runtime.exceptionThrown', ({ exceptionDetails }) => {
+      page.exceptions.push(exceptionDetails.exception?.description ?? exceptionDetails.text)
+    })
+    cdp.on('Network.requestWillBeSent', ({ request }) => {
+      if (leavesLoopback(request.url)) page.outside.push(`${request.method} ${request.url}`)
+    })
+    cdp.on('Network.webSocketCreated', ({ url }) => {
+      if (leavesLoopback(url)) page.outside.push(`WebSocket ${url}`)
+    })
+    await cdp.send('Network.enable')
+    await cdp.send('Page.enable')
+    await cdp.send('Runtime.enable')
+    for (const cookie of cookies) {
+      await cdp.send('Network.setCookie', {
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+      })
+    }
+    // Wait for both together, so a failed navigate cannot leave the load
+    // waiter rejecting unobserved.
+    await Promise.all([cdp.waitEvent('Page.loadEventFired'), cdp.send('Page.navigate', { url: origin })])
+    await body(cdp, page)
+    await saveEvidence(cdp, page, evidence)
+    // Saving the evidence takes a moment, and the page keeps running. Check
+    // again so a late exception or request fails the run instead of only
+    // appearing in console.json.
+    const late = await pageProblems(cdp, page)
+    if (late.length > 0) throw new ProductFailure(`${PAGE_ERRORS}:\n  ${late.join('\n  ')}`)
+  } catch (error) {
+    await saveEvidence(cdp, page, evidence)
+    // A crashed slot usually surfaces first as a missing element, which
+    // reads as a harness step. The crash is the product failure, so it is
+    // named and never retried: a crash that goes away in a second browser
+    // is still a crash.
+    const problems = await pageProblems(cdp, page)
+    if (problems.length > 0 && error instanceof Error && !error.message.startsWith(PAGE_ERRORS)) {
+      throw new ProductFailure(`${error.message}\n  ${PAGE_ERRORS}:\n  ${problems.join('\n  ')}`)
+    }
+    throw error
+  } finally {
+    cdp?.close()
+    await stopChrome(child)
+    // Chrome can still be releasing the profile directory for a moment.
+    for (const dir of [profile, chromeTmp]) {
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+      } catch {
+        console.error(`host E2E: could not remove Chrome's directory ${dir}`)
+      }
+    }
+  }
+}
+
+async function saveEvidence(cdp, page, dir) {
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'console.json'), `${JSON.stringify(page, null, 2)}\n`)
+  if (cdp === undefined) return
+  try {
+    const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
+    writeFileSync(join(dir, 'screenshot.png'), Buffer.from(shot.data, 'base64'))
+    writeFileSync(join(dir, 'dom.html'), await cdp.evaluate('document.documentElement.outerHTML'))
+    writeFileSync(join(dir, 'summary.txt'), `${await snapshot(cdp)}\n`)
+  } catch (error) {
+    writeFileSync(join(dir, 'evidence-error.txt'), String(error))
+  }
+}
+
+async function drive(cdp, page) {
+  // Harness: reach an editable composer.
+  if (!await waitFor(cdp, hasText('Send message'), 30_000)) throw new HarnessFailure('web UI did not show a composer')
+  await dismissOnboarding(cdp)
+  await ensureWorkspace(cdp)
+
+  // Product: the host's model picker lists the plugin's Codex model.
+  if (!await clickLabel(cdp, ['Select model', '选择模型'])) throw new HarnessFailure('model menu did not open')
+  if (!await clickLabel(cdp, ['Model', '模型'])) throw new HarnessFailure('model list did not open')
+  if (!await waitFor(cdp, hasText(CODEX_MODEL.name), 20_000)) {
+    throw new ProductFailure(`the host model picker does not list ${CODEX_MODEL.name}`)
+  }
+  console.log(`ok: model picker lists ${CODEX_MODEL.name}`)
+  if (!await clickLabel(cdp, [CODEX_MODEL.name])) throw new HarnessFailure(`${CODEX_MODEL.name} could not be selected`)
+  await dismissOnboarding(cdp)
+  await pressKey(cdp, 'Escape', 27)
+
+  // Harness: send one message.
+  if (!await typeDraft(cdp, 'host e2e check')) throw new HarnessFailure('composer did not accept the draft')
+  if (!await clickEnabled(cdp, ['Send message', '发送消息'])) throw new HarnessFailure('composer send control was not available')
+  if (!await waitFor(cdp, '(() => document.querySelector(\'[data-phase="active"]\') !== null)()', 15_000)) {
+    throw new HarnessFailure('composer stayed on the hero layout after send')
+  }
+
+  // Product: the reply streamed through the plugin's Codex adapter.
+  if (!await waitFor(cdp, `document.body.innerText.includes(${JSON.stringify(CODEX_REPLY)})`, 30_000)) {
+    throw new ProductFailure(`the canned Codex reply "${CODEX_REPLY}" did not render in the transcript`)
+  }
+  console.log('ok: a Codex message streamed through the plugin and rendered')
+
+  // Product: the pill sits in the host's stats row, not on its own line.
+  const pillIn = (scope) => `(() => [...document.querySelectorAll(${JSON.stringify(`${scope} button`.trim())})]
+    .some(node => (node.getAttribute('aria-label') || '').includes(${JSON.stringify(CODEX_PILL)})))()`
+  const statsRow = `[${HOST_CONTRACT.markers.composerStats.attribute}]`
+  if (!await waitFor(cdp, pillIn(statsRow), 30_000)) {
+    const elsewhere = await cdp.evaluate(pillIn(''))
+    throw new ProductFailure(elsewhere
+      ? `the usage pill ${CODEX_PILL} rendered outside ${statsRow}`
+      : `the usage pill ${CODEX_PILL} did not render`)
+  }
+  console.log(`ok: usage pill ${CODEX_PILL} renders inside ${statsRow}`)
+
+  // Product: the dialog lists every source with its own percentage.
+  if (!await clickLabel(cdp, [CODEX_PILL])) throw new HarnessFailure('the usage pill could not be clicked')
+  if (!await waitFor(cdp, '(() => document.querySelector(\'[role="dialog"]\') !== null)()', 10_000)) {
+    throw new ProductFailure('the usage dialog did not open')
+  }
+  // Antigravity quotas stay behind the preview disclosure unless the current
+  // model is an Antigravity model. Open every disclosure before reading.
+  await cdp.evaluate(`(() => {
+    for (const summary of document.querySelectorAll('[role="dialog"] summary')) summary.click()
+    return true
+  })()`)
+  // The badge fills the dialog from usage RPCs that settle at their own
+  // pace, so poll until it shows the fixture, and judge the last snapshot
+  // when the deadline passes. A wrong value only fails later; it cannot pass.
+  let sections = []
+  let wrong = []
+  const deadline = Date.now() + DIALOG_SETTLE_MS
+  for (;;) {
+    sections = await dialogSections(cdp)
+    wrong = dialogMismatches(sections)
+    if (wrong.length === 0 || Date.now() >= deadline) break
+    await delay(250)
+  }
+  if (wrong.length > 0) {
+    throw new ProductFailure(`usage dialog does not match the fixture:\n  ${wrong.join('\n  ')}\n  sections: ${JSON.stringify(sections).slice(0, 2000)}`)
+  }
+  console.log('ok: usage dialog lists every source with its fixture percentage')
+
+  // Product: nothing crashed along the way.
+  const problems = await pageProblems(cdp, page)
+  if (problems.length > 0) throw new ProductFailure(`${PAGE_ERRORS}:\n  ${problems.join('\n  ')}`)
+  console.log('ok: no slot crash, host contract miss, uncaught page error, or page request outside loopback')
+}
+
+/**
+ * Each provider section of the open usage dialog: its name, and the
+ * percentage of every window row under it. textContent includes rows inside
+ * a closed disclosure, so this does not depend on which ones are open.
+ */
+function dialogSections(cdp) {
+  return cdp.evaluate(`[...document.querySelectorAll('[role="dialog"] section')].map(section => ({
+    name: [...(section.querySelector('span')?.childNodes ?? [])]
+      .filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim(),
+    percents: [...section.querySelectorAll('dd')].map(dd => /^\\s*(\\d+)%/.exec(dd.textContent ?? '')?.[1] ?? dd.textContent),
+  }))`)
+}
+
+/** How the dialog's sections differ from the fixture; empty when they match. */
+function dialogMismatches(sections) {
+  const wrong = []
+  for (const { name, percent } of Object.values(USAGE_PERCENT)) {
+    const matches = sections.filter(section => section.name === name)
+    if (matches.length !== 1) {
+      wrong.push(`${name}: ${matches.length} sections`)
+    } else if (JSON.stringify(matches[0].percents) !== JSON.stringify([String(percent)])) {
+      wrong.push(`${name}: shows ${JSON.stringify(matches[0].percents)}, fixture serves ${percent}%`)
+    }
+  }
+  // Copilot is signed in, but the plugin has no Copilot usage endpoint.
+  const expectedNames = new Set(Object.values(USAGE_PERCENT).map(({ name }) => name))
+  for (const { name } of sections) {
+    if (!expectedNames.has(name)) wrong.push(`unexpected section ${JSON.stringify(name)}`)
+  }
+  return wrong
+}
+
+/** Whether a page request would leave loopback; data:, blob:, and the like never do. */
+function leavesLoopback(url) {
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (!['http:', 'https:', 'ws:', 'wss:'].includes(parsed.protocol)) return false
+  return !/^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/.test(parsed.hostname)
+}
+
+/**
+ * Slot crashes, host contract misses, uncaught exceptions, and page requests
+ * outside loopback seen so far. The slot renderer catches an entry's crash,
+ * so it never reaches the page's error handlers; its console line and crash
+ * face are the only trace.
+ */
+async function pageProblems(cdp, page) {
+  const { crashLog, errorAttribute } = HOST_CONTRACT.diagnostics
+  // The recorded events stand even when the page can no longer be queried:
+  // a dead CDP socket must not turn a seen crash into a retried harness step.
+  // A failed DOM query is not itself a product problem: a harness failure
+  // follows from the dead page anyway.
+  let crashFaces = []
+  if (cdp !== undefined) {
+    try {
+      const crashed = await cdp.evaluate(`[...document.querySelectorAll('[${errorAttribute}]')].map(node => node.getAttribute('${errorAttribute}'))`)
+      crashFaces = crashed.map(slot => `slot ${slot} rendered its crash face`)
+    } catch {
+      // Keep the recorded events below.
+    }
+  }
+  return [
+    ...crashFaces,
+    ...page.console.filter(entry => entry.text.includes(crashLog)).map(entry => `console: ${entry.text.slice(0, 400)}`),
+    ...page.console.filter(entry => entry.text.includes(HOST_CONTRACT_MISS)).map(entry => `console: ${entry.text.slice(0, 400)}`),
+    ...page.exceptions.map(text => `uncaught: ${text.slice(0, 400)}`),
+    ...page.outside.map(request => `page request outside loopback (blocked): ${request}`),
+  ]
+}
+
+/**
+ * Make the composer editable. host-e2e.sh points the host's default
+ * workspace at a temp directory, so a fresh profile normally opens one by
+ * itself. When it does not, open a temp directory through the host's
+ * directory picker.
+ */
+async function ensureWorkspace(cdp) {
+  if (await editorReady(cdp, 15_000)) {
+    console.log('harness: the host opened its default workspace')
+    return
+  }
+  console.log('harness: no default workspace; opening one through the directory picker')
+  mkdirSync(workspaceRoot, { recursive: true })
+  const workspace = mkdtempSync(join(workspaceRoot, 'workspace-'))
+  if (!await clickLabel(cdp, ['Choose workspace'])) throw new HarnessFailure('no default workspace, and the workspace picker did not open')
+  // The picker lists the home directory first. While that listing loads,
+  // its controls are disabled, and when it lands it closes the path editor.
+  // Clicking Edit path before then loses the typed path, so wait until the
+  // control has stayed enabled across two polls.
+  const editPath = '(() => { const node = document.querySelector(\'button[aria-label="Edit path"]\'); return node !== null && !node.disabled })()'
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (!await waitStable(cdp, editPath, 15_000)) throw new HarnessFailure('the workspace picker never settled')
+    await clickLabel(cdp, ['Edit path'])
+    if (!await waitFor(cdp, '(() => document.querySelector(\'input[aria-label="Edit path"]\') !== null)()', 5_000)) continue
+    const typed = await cdp.evaluate(`(() => {
+      const input = document.querySelector('input[aria-label="Edit path"]')
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      if (input === null || setter === undefined) return false
+      setter.call(input, ${JSON.stringify(workspace)})
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.focus()
+      return input.value
+    })()`)
+    if (typed !== workspace) continue
+    await pressKey(cdp, 'Enter', 13)
+    if (await waitFor(cdp, hasText(workspace.split('/').at(-1)), 15_000)) {
+      if (!await clickExact(cdp, 'Open')) throw new HarnessFailure(`workspace Open was not available for ${workspace}`)
+      if (!await editorReady(cdp)) throw new HarnessFailure('composer did not become editable after opening the workspace')
+      return
+    }
+  }
+  throw new HarnessFailure('the workspace path could not be entered')
+}
+
+// ---------------------------------------------------------------------------
+// Seen-log check
+
+/**
+ * Every line the preload logged is an exact FIXTURE_REQUESTS hit with the
+ * fixture credential, or a refusal listed in EXPECTED_REFUSALS. Every
+ * required fixture was hit at least once.
+ */
+function checkSeenLog() {
+  let lines
+  try {
+    lines = readFileSync(seenPath, 'utf8').split('\n').filter(line => line.length > 0).map(line => JSON.parse(line))
+  } catch (error) {
+    // The usage RPCs already returned fixture values, so the preload served
+    // and logged them; a log that cannot be read is the harness's problem.
+    throw new HarnessFailure(`cannot read the network preload's request log: ${error.message}`)
+  }
+  const problems = []
+  const hits = new Set()
+  for (const entry of lines) {
+    if (entry.refused === true) {
+      const target = entry.url ?? entry.host
+      // A planned URL may carry a query string (catalog clients add their
+      // version or beta flag); anything else, a longer path included, is new.
+      if (!EXPECTED_REFUSALS.some(planned => target === planned || (entry.url !== undefined && target.startsWith(`${planned}?`)))) {
+        problems.push(`unplanned request refused: ${entry.method ?? 'TCP'} ${target}`)
+      }
+      continue
+    }
+    const key = `${entry.method} ${entry.url}`
+    const fixture = FIXTURE_REQUESTS[key]
+    if (fixture === undefined) {
+      problems.push(`logged request matches no fixture: ${key}`)
+      continue
+    }
+    hits.add(key)
+    if (entry.fixtureAuth !== true) problems.push(`${key} did not carry the fixture credential`)
+    if (fixture.stream && entry.model !== CODEX_MODEL.id) {
+      problems.push(`the Codex request asked for model ${entry.model}, not ${CODEX_MODEL.id}`)
+    }
+  }
+  for (const [key, fixture] of Object.entries(FIXTURE_REQUESTS)) {
+    if (fixture.required && !hits.has(key)) problems.push(`no request reached ${key}`)
+  }
+  if (problems.length > 0) throw new ProductFailure(`provider traffic was not as planned:\n  ${[...new Set(problems)].join('\n  ')}`)
+}
+
+// ---------------------------------------------------------------------------
+// Host UI helpers
+
+async function dismissOnboarding(cdp) {
+  // Exact labels, and the confirmation actions before Skip. Skip is also the
+  // footer control that opens the confirmation, so matching it first would
+  // click the footer again and never confirm.
+  const labels = ['Continue', 'Configure later', 'Open app', 'Got it', 'Skip', 'Get started', 'Next']
+  for (let step = 0; step < 8; step++) {
+    let clicked = false
+    for (const label of labels) {
+      if (await clickExact(cdp, label, 1)) {
+        clicked = true
+        break
+      }
+    }
+    if (!clicked) return
+    await delay(400)
+  }
+}
+
+async function pressKey(cdp, key, windowsVirtualKeyCode) {
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode })
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode })
+}
+
+async function typeDraft(cdp, text) {
+  const box = await cdp.evaluate(`(() => {
+    const el = document.querySelector('[data-composer-input]')
+    if (el === null) return null
+    const rect = el.getBoundingClientRect()
+    return { x: rect.x + Math.min(24, rect.width / 2), y: rect.y + Math.min(16, rect.height / 2) }
+  })()`)
+  if (box === null || box === undefined) return false
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box.x, y: box.y, button: 'left', clickCount: 1 })
+  await cdp.send('Input.insertText', { text })
+  if (await draftHas(cdp, text)) return true
+  await cdp.evaluate(`(() => {
+    const el = document.querySelector('[data-composer-input]')
+    el?.focus()
+    document.execCommand('insertText', false, ${JSON.stringify(text)})
+    return true
+  })()`)
+  return draftHas(cdp, text)
+}
+
+function draftHas(cdp, text) {
+  return cdp.evaluate(`(() => (document.querySelector('[data-composer-input]')?.innerText || '').includes(${JSON.stringify(text)}))()`)
+    .then(value => value === true)
+}
+
+function editorReady(cdp, timeoutMs = 15_000) {
+  return waitFor(cdp, '(() => document.querySelector(\'[data-composer-input][contenteditable="true"]\') !== null)()', timeoutMs)
+}
+
+function hasText(text) {
+  return `(() => [...document.querySelectorAll('button,[role="menuitem"],[role="menuitemradio"]')].some(node => ((node.getAttribute('aria-label') || '') + ' ' + (node.innerText || '')).includes(${JSON.stringify(text)})))()`
+}
+
+async function clickExact(cdp, label, attempts = 10) {
+  const expression = `(() => {
+    const node = [...document.querySelectorAll('button')].find(item => (item.innerText || '').trim() === ${JSON.stringify(label)} && !item.disabled)
+    if (node === undefined) return false
+    node.click()
+    return true
+  })()`
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (await cdp.evaluate(expression) === true) return true
+    await delay(300)
+  }
+  return false
+}
+
+async function clickLabel(cdp, labels, attempts = 10) {
+  const expression = `(() => {
+    const labels = ${JSON.stringify(labels)}
+    const nodes = [...document.querySelectorAll('button,[role="menuitem"],[role="menuitemradio"]')]
+    const node = nodes.find(item => {
+      const text = (item.getAttribute('aria-label') || '') + ' ' + (item.innerText || '')
+      return labels.some(label => text.includes(label))
+    })
+    if (node === undefined) return false
+    node.click()
+    return true
+  })()`
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (await cdp.evaluate(expression) === true) return true
+    await delay(300)
+  }
+  return false
+}
+
+async function clickEnabled(cdp, labels, attempts = 10) {
+  const expression = `(() => {
+    const labels = ${JSON.stringify(labels)}
+    const node = [...document.querySelectorAll('button')].find(item => {
+      if (item.disabled) return false
+      const text = (item.getAttribute('aria-label') || '') + ' ' + (item.innerText || '')
+      return labels.some(label => text.includes(label))
+    })
+    if (node === undefined) return false
+    node.click()
+    return true
+  })()`
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (await cdp.evaluate(expression) === true) return true
+    await delay(300)
+  }
+  return false
+}
+
+async function waitFor(cdp, expression, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await cdp.evaluate(expression) === true) return true
+    await delay(300)
+  }
+  return false
+}
+
+/** Like waitFor, but the expression must hold on two polls in a row. */
+async function waitStable(cdp, expression, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  let held = 0
+  while (Date.now() < deadline) {
+    held = await cdp.evaluate(expression) === true ? held + 1 : 0
+    if (held >= 2) return true
+    await delay(300)
+  }
+  return false
+}
+
+function snapshot(cdp) {
+  return cdp.evaluate(`(() => {
+    const phase = document.querySelector('[data-phase]')?.getAttribute('data-phase') ?? ''
+    const draft = (document.querySelector('[data-composer-input]')?.innerText || '').slice(0, 80)
+    const send = [...document.querySelectorAll('button')].find(node => (node.getAttribute('aria-label') || '').includes('Send message'))
+    const buttons = [...document.querySelectorAll('button')].map(node => (node.getAttribute('aria-label') || node.innerText || '').trim().slice(0, 160)).filter(Boolean).slice(0, 60)
+    return ['phase: ' + phase, 'draft: ' + JSON.stringify(draft), 'sendDisabled: ' + (send === undefined ? 'missing' : String(send.disabled)), 'buttons:', ...buttons].join('\\n')
+  })()`)
+}
+
+// ---------------------------------------------------------------------------
+// Chrome and CDP plumbing
+
+function findChrome() {
+  const names = [process.env.CHROME_BIN, 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']
+    .filter(name => name !== undefined && name.length > 0)
+  for (const name of names) {
+    try {
+      execFileSync(name, ['--version'], { stdio: 'ignore' })
+      return name
+    } catch { /* try the next name */ }
+  }
+  throw new HarnessFailure('Chrome is not installed; set CHROME_BIN to a Chromium binary')
+}
+
+/** Stop Chrome's whole process group, and wait until it is gone. */
+async function stopChrome(child) {
+  const signalGroup = signal => {
+    try {
+      process.kill(-child.pid, signal)
+      return true
+    } catch {
+      return false // the group has already exited
+    }
+  }
+  if (!signalGroup('SIGTERM')) return
+  for (let waited = 0; waited < 3_000; waited += 100) {
+    await new Promise(resolve => setTimeout(resolve, 100))
+    if (!signalGroup(0)) return
+  }
+  signalGroup('SIGKILL')
+  for (let waited = 0; waited < 2_000 && signalGroup(0); waited += 100) {
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+}
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address !== null ? address.port : 0
+      server.close(() => resolve(port))
+    })
+  })
+}
+
+async function waitForJson(url) {
+  const deadline = Date.now() + 15_000
+  let last
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(2_000) })
+      if (response.ok) return await response.json()
+      last = `HTTP ${response.status}`
+    } catch (error) {
+      last = error
+    }
+    await delay(200)
+  }
+  throw new HarnessFailure(`Chrome DevTools did not answer: ${last}`)
+}
+
+/**
+ * A CDP session over one page socket. Every command and awaited event fails
+ * with a HarnessFailure after CDP_TIMEOUT_MS or when the socket closes, so a
+ * crashed Chrome ends the attempt instead of hanging until the CI timeout.
+ */
+function connect(url) {
+  const ws = new WebSocket(url)
+  let next = 0
+  let closed
+  const pending = new Map()
+  const waiters = new Map()
+  const listeners = new Map()
+  const ready = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new HarnessFailure('Chrome DevTools socket did not open')), CDP_TIMEOUT_MS)
+    ws.addEventListener('open', () => { clearTimeout(timer); resolve() })
+    ws.addEventListener('error', () => { clearTimeout(timer); reject(new HarnessFailure('Chrome DevTools socket failed')) })
+  })
+  ws.addEventListener('close', () => {
+    closed = new HarnessFailure('Chrome DevTools socket closed (did Chrome crash?)')
+    for (const waiter of pending.values()) waiter.reject(closed)
+    pending.clear()
+    for (const queue of waiters.values()) for (const waiter of queue) waiter.reject(closed)
+    waiters.clear()
+  })
+  /**
+   * Hand `register` a waiter, and reject after CDP_TIMEOUT_MS naming `what`.
+   * `register` returns how to drop the waiter again, so a timed-out waiter
+   * does not stay registered.
+   */
+  const bounded = (what, register) => new Promise((resolve, reject) => {
+    if (closed !== undefined) {
+      reject(closed)
+      return
+    }
+    let unregister = () => {}
+    const timer = setTimeout(() => {
+      unregister()
+      reject(new HarnessFailure(`Chrome DevTools: ${what} timed out`))
+    }, CDP_TIMEOUT_MS)
+    unregister = register({
+      resolve: value => { clearTimeout(timer); resolve(value) },
+      reject: error => { clearTimeout(timer); reject(error) },
+    })
+  })
+  ws.addEventListener('message', event => {
+    const message = JSON.parse(String(event.data))
+    if (message.id !== undefined) {
+      const waiter = pending.get(message.id)
+      if (waiter === undefined) return
+      pending.delete(message.id)
+      if (message.error !== undefined) waiter.reject(new Error(JSON.stringify(message.error)))
+      else waiter.resolve(message.result)
+      return
+    }
+    for (const listener of listeners.get(message.method) ?? []) listener(message.params)
+    const queue = waiters.get(message.method)
+    if (queue === undefined) return
+    waiters.delete(message.method)
+    for (const waiter of queue) waiter.resolve(message.params)
+  })
+  return ready.then(() => ({
+    send(method, params) {
+      const id = ++next
+      return bounded(method, waiter => {
+        pending.set(id, waiter)
+        ws.send(JSON.stringify({ id, method, params }))
+        return () => pending.delete(id)
+      })
+    },
+    on(method, listener) {
+      listeners.set(method, [...listeners.get(method) ?? [], listener])
+    },
+    waitEvent(method) {
+      return bounded(`waiting for ${method}`, waiter => {
+        waiters.set(method, [...waiters.get(method) ?? [], waiter])
+        return () => {
+          const rest = (waiters.get(method) ?? []).filter(other => other !== waiter)
+          if (rest.length > 0) waiters.set(method, rest)
+          else waiters.delete(method)
+        }
+      })
+    },
+    async evaluate(expression) {
+      const result = await this.send('Runtime.evaluate', { expression, returnByValue: true })
+      if (result.exceptionDetails !== undefined) {
+        throw new HarnessFailure(`page expression failed: ${result.exceptionDetails.text ?? expression.slice(0, 80)}`)
+      }
+      return result.result?.value
+    },
+    close() {
+      ws.close()
+    },
+  }))
+}
+
+function delay(ms) {
+  return new Promise(resolve => { setTimeout(resolve, ms) })
+}

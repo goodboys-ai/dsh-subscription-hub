@@ -131,6 +131,16 @@ export async function latestVsCodeVersion(fetchFn: FetchFn = hostFetch, forceRef
 }
 
 /**
+ * Forget the resolved VS Code version, so the next resolve starts from an
+ * empty cache. Test-only: the cache is module-level and outlives each test.
+ * @internal Exported for tests only; not part of the plugin's public surface.
+ */
+export function resetVsCodeVersionCacheForTests(): void {
+  vscodeVersionCache = undefined
+  vscodeVersionInflight = undefined
+}
+
+/**
  * The device-flow facts for the auth controller's DeviceFlowManager.
  * @returns the flow spec for one attempt.
  */

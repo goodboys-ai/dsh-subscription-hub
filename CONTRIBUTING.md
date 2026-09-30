@@ -21,15 +21,34 @@ pnpm test
 ```
 
 The test suite uses fake provider responses and must run without real provider
-credentials or calls to production provider servers. If you change an Agent
-Note, also run `node scripts/verify-agent-notes.mjs`.
+credentials or calls to production provider servers. `pnpm test` refuses any
+connection that leaves loopback and fails the spec that tried, so mock every
+provider request a new test makes. If you change an Agent Note, also run
+`node scripts/verify-agent-notes.mjs`.
 
 Run checks that cover the change and report the commands and results in the
-PR. For DSH compatibility or packaging changes, use the isolated boot smoke
-described in [testing.md](docs/testing.md). It creates a temporary `DSH_HOME`
-and does not use an existing DSH profile. CI builds one tarball and boots it
-on every version in `dsh-versions.txt`; see the
-[compatibility policy](docs/compatibility.md) before changing that window.
+PR. [testing.md](docs/testing.md) lists what each check covers:
+
+- DSH compatibility or packaging: the host-export and host contract checks
+  (`--all`) and the isolated boot smoke.
+- Client UI, the usage bar, model registration, or streaming: the host E2E,
+  `bash scripts/host-e2e.sh`. It needs Chrome or Chromium (`CHROME_BIN`).
+- A client change that reads a new host name (icon, slot, service, DOM
+  marker, theme token, host export): add it to
+  `src/client/host-contract.ts`; `test/host-contract.spec.ts` fails until you
+  do. Name it with a literal, not a computed string, so the scan can see it.
+- A plugin change that makes a new provider request in the host E2E path:
+  add a fixture or a planned refusal to `scripts/host-e2e-fixture.mjs`; the
+  host E2E fails on any request it did not plan.
+
+Every script creates a temporary `DSH_HOME` and does not use an existing DSH
+profile. CI builds one tarball and runs it on every version in
+`dsh-versions.txt`; see the [compatibility policy](docs/compatibility.md)
+before changing that window.
+
+A bug fix comes with a test that fails without the fix. Say in the PR which
+test that is, and add a row to the bug replay table in
+[testing.md](docs/testing.md#bug-replay) when the bug is user-visible.
 
 ## Provider and UI changes
 

@@ -1,5 +1,5 @@
 /**
- * Virtual Grok provider for integration tests (L3, see docs/testing.md).
+ * Virtual Grok provider for integration tests (see docs/testing.md).
  *
  * Fetch-level router simulating xAI's HTTP surface so the *real* plugin
  * code — grokDiscovery, grokFlow, exchangeGrokCode, refreshGrok,
@@ -28,6 +28,14 @@
  * with the challenge echo, tier-claim reading, SSE translation). What it
  * cannot prove: that xAI still honors the contract — that is the manual
  * pre-release canary.
+ *
+ * Provenance:
+ * Source: the Grok CLI's OIDC client identity, the cli-chat-proxy billing
+ * and model-catalog endpoints, and the xAI Responses-style API, mirrored in
+ * src/providers/grok.ts (tier names mirror grok-build's jwt_tier_claim).
+ * Shapes as of: 1891a32 (2026-09-28). Not compared with the live provider
+ * since; update this line when a canary run confirms or corrects them.
+ * Drift signal: the manual pre-release canary's login plus one model request.
  */
 import type { TestContext } from 'node:test'
 /**

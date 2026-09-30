@@ -1,5 +1,5 @@
 /**
- * L3 virtual-provider integration test: Cursor (see docs/testing.md).
+ * Virtual-provider integration test: Cursor (see docs/testing.md).
  *
  * The fetch-level Cursor route runs against {@link installFakeCursor}'s
  * virtual backend — no credentials, no browser, no network. What is REAL in

@@ -1,5 +1,5 @@
 /**
- * L3 virtual-provider integration test: Codex (see docs/testing.md).
+ * Virtual-provider integration test: Codex (see docs/testing.md).
  *
  * The whole Codex route runs against {@link installFakeCodex}'s virtual
  * backend — no credentials, no browser, no network. What is REAL in every

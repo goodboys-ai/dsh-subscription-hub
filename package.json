@@ -65,7 +65,8 @@
   },
   "scripts": {
     "build": "tsc && tsdown",
-    "test": "tsc -p tsconfig.test.json && node --test \"lib-test/test/**/*.spec.js\"",
+    "test": "tsc -p tsconfig.test.json && node --import ./test/hermetic.mjs --test \"lib-test/test/**/*.spec.js\"",
+    "test:mutation": "stryker run",
     "prepare": "tsdown -c tsdown.prepare.config.ts",
     "prepublishOnly": "pnpm build && pnpm test"
   },
@@ -97,9 +98,11 @@
     "@deepseek-ai/dsh-tools": "0.1.7-rc.2",
     "@deepseek-ai/dsh-web": "0.1.7-rc.2",
     "@deepseek-ai/schemastery": "3.18.4",
+    "@stryker-mutator/core": "^10.0.0",
     "@types/node": "^24.0.0",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.7",
+    "fast-check": "^4.10.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tsdown": "^0.15.0",

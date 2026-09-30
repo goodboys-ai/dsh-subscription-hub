@@ -23,6 +23,16 @@ test('OpenCode Go usage maps all three windows and sends the key only upstream',
   })
 })
 
+test('OpenCode Go HTTP errors do not disclose the key', async () => {
+  const http = (async () => new Response('', { status: 401 })) as typeof fetch
+  await assert.rejects(() => fetchOpenCodeGoUsage('go-secret', http), error => {
+    assert.ok(error instanceof Error)
+    assert.match(error.message, /HTTP 401/)
+    assert.ok(!error.message.includes('go-secret'))
+    return true
+  })
+})
+
 test('OpenCode Go rejects a malformed response instead of showing empty quota', async () => {
   const http = (async () => Response.json({ usage: { rolling: { percent: '25' } } })) as typeof fetch
   await assert.rejects(() => fetchOpenCodeGoUsage('secret', http), /no valid windows/)

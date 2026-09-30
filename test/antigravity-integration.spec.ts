@@ -1,5 +1,5 @@
 /**
- * L3 virtual-provider integration test: Antigravity (see docs/testing.md).
+ * Virtual-provider integration test: Antigravity (see docs/testing.md).
  *
  * The whole Antigravity route runs against {@link installFakeAntigravity}'s
  * virtual backend — no credentials, no browser, no network. What is REAL in

@@ -1,5 +1,5 @@
 /**
- * L3 virtual-provider integration test: Claude (see docs/testing.md).
+ * Virtual-provider integration test: Claude (see docs/testing.md).
  *
  * The whole Claude route runs against {@link installFakeClaude}'s virtual
  * backend — no credentials, no browser, no network. What is REAL in every

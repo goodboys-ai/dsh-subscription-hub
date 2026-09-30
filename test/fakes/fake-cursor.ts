@@ -1,5 +1,5 @@
 /**
- * Virtual Cursor provider for integration tests (L3, see docs/testing.md).
+ * Virtual Cursor provider for integration tests (see docs/testing.md).
  *
  * Fetch-level router simulating Cursor's HTTP surface so the *real* plugin
  * code — CursorAuth (browser-login poll + refresh), fetchCursorUsage,
@@ -25,6 +25,14 @@
  * intercept — faking it would mean reimplementing the framing protocol
  * instead of testing our code. Auth, refresh, usage, and catalog discovery
  * are the fetch-level contract and are fully covered.
+ *
+ * Provenance:
+ * Source: Cursor's undocumented Agent protocol and dashboard endpoints from
+ * orrinzeng/dsh-cursor-subscription (docs/cursor-origin.md).
+ * Shapes as of: 1891a32 (2026-09-28). Not compared with the live provider
+ * since; update this line when a canary run confirms or corrects them.
+ * Drift signal: the manual pre-release canary's login plus one model request,
+ * the only check covering the HTTP/2 generation this fake cannot reach.
  */
 import type { TestContext } from 'node:test'
 import { mintFakeJwt } from './fake-codex.js'

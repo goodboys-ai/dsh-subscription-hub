@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * L1 host-export contract check.
+ * Host-export check.
  *
  * Verifies that this plugin's `src/` type-checks against a given DSH
  * version's `@deepseek-ai/*` type declarations — without booting anything.
@@ -17,8 +17,11 @@
  *   node scripts/check-host-exports.mjs --dsh 0.2.0-rc.1
  *   node scripts/check-host-exports.mjs --all            # every version in dsh-versions.txt
  *
- * Exit 0 when src compiles against every requested version, 1 otherwise.
- * Installs are cached under the OS temp dir per version.
+ * Exit 0 when src compiles against every requested version, 1 when the
+ * compiler reports a diagnostic against one or a host package is not
+ * published at it, and 2 on anything else: npm, the compiler, or the file
+ * system failed, so the check says nothing about the host. Installs are
+ * cached under the OS temp dir per version.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -77,6 +80,12 @@ function installSpec(name, version) {
   return current === undefined ? `${name}@${version}` : `${name}@${current}`
 }
 
+/** The check could not run. Every exception other than a finding exits 2. */
+class SetupFailure extends Error {}
+
+/** A host package the plugin imports is not published at the checked version. */
+class MissingHostPackage extends Error {}
+
 /** Install the host packages at one DSH version into a cached temp dir. */
 function installHost(version) {
   const dir = join(tmpdir(), 'dsh-host-exports', version)
@@ -85,8 +94,20 @@ function installHost(version) {
     mkdirSync(dir, { recursive: true })
     const specs = hostPackages().map(name => installSpec(name, version))
     console.log(`installing ${specs.length} @deepseek-ai/* packages for DSH ${version} ...`)
-    execFileSync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '--legacy-peer-deps', '--prefix', dir, ...specs],
-      { stdio: 'inherit' })
+    // tsc only reads the declarations, so the packages' install scripts never run.
+    try {
+      execFileSync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts', '--legacy-peer-deps', '--prefix', dir, ...specs],
+        { stdio: ['ignore', 'inherit', 'pipe'] })
+    } catch (error) {
+      const stderr = error.stderr?.toString() ?? ''
+      process.stderr.write(stderr)
+      // A package missing at this version is a finding about the host.
+      // Anything else (network, registry) only means the check did not run.
+      if (/\bcode (?:ETARGET|E404)\b/.test(stderr)) {
+        throw new MissingHostPackage(`a host package is not published at DSH ${version}`)
+      }
+      throw new SetupFailure(`npm could not install the host packages for DSH ${version}`)
+    }
     writeFileSync(marker, `${version}\n`)
   }
   return dir
@@ -94,7 +115,14 @@ function installHost(version) {
 
 /** Type-check src/ against one DSH version's host packages. Returns true on success. */
 function checkVersion(version) {
-  const dir = installHost(version)
+  let dir
+  try {
+    dir = installHost(version)
+  } catch (error) {
+    if (!(error instanceof MissingHostPackage)) throw error
+    console.log(`DSH ${version}: FAIL — ${error.message}`)
+    return false
+  }
   const cacheDir = join(root, '.cache', 'host-exports')
   mkdirSync(cacheDir, { recursive: true })
   const tsconfigPath = join(cacheDir, `tsconfig.${version}.json`)
@@ -114,8 +142,14 @@ function checkVersion(version) {
     console.log(`DSH ${version}: ok — src/ compiles against this version's host APIs`)
     return true
   } catch (error) {
-    console.log(`DSH ${version}: FAIL — src/ does not compile against this version's host APIs`)
     const out = (error.stdout?.toString() ?? '') + (error.stderr?.toString() ?? '')
+    // Only a diagnostic located in a source file is a finding. A compiler
+    // that died, or reported only a config error, did not check anything.
+    if (!/\.tsx?\(\d+,\d+\): error TS\d+:/.test(out)) {
+      process.stderr.write(out)
+      throw new SetupFailure(`the compiler failed without a diagnostic: ${error.message}`)
+    }
+    console.log(`DSH ${version}: FAIL — src/ does not compile against this version's host APIs`)
     // Show at most the first 30 diagnostics; the full output is in the CI log.
     console.log(out.split('\n').slice(0, 30).join('\n'))
     return false
@@ -144,4 +178,17 @@ function main() {
   console.log('\nAll requested DSH versions satisfy the host contract.')
 }
 
-main()
+/** Findings are returned, never thrown, so any exception means the check did not run. */
+function setupExit(error) {
+  console.error(`SETUP FAILURE: ${error instanceof Error ? error.message : String(error)}`)
+  if (!(error instanceof SetupFailure) && error instanceof Error) console.error(error.stack)
+  process.exit(2)
+}
+process.on('uncaughtException', setupExit)
+process.on('unhandledRejection', setupExit)
+
+try {
+  main()
+} catch (error) {
+  setupExit(error)
+}

@@ -6,17 +6,23 @@
  * the `status` endpoint degrading per provider when one store entry is corrupt.
  */
 
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type { RpcResult } from '../src/compat.js'
 import { createFakeConnection } from './fake-connection.js'
 import type { FakeConnectionHandler } from './fake-connection.js'
 
-process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'router-rpc-test-'))
+const home = mkdtempSync(join(tmpdir(), 'router-rpc-test-'))
+// Suite-level hook: the mkdtemp is top-level, so there is no test context to hang t.after on.
+after(() => { rmSync(home, { recursive: true, force: true }) })
+process.env.DSH_HOME = home
+/** The auth store every mount in this file shares; a test that writes it removes it again. */
+const authFile = join(process.env.DSH_HOME, 'plugins', 'subscriptions', 'auth.json')
 
 // Imports after the env override so the store path resolves under the temp home.
 const plugin = await import('../src/index.js')
@@ -26,13 +32,13 @@ interface FakeStore {
 }
 
 /** Mount the plugin with fake llm/connection (and optional attachments); return the RPC handler. */
-async function mount(attachments?: FakeStore, credentials?: { resolve(ref: string): Promise<{ value: string } | undefined> }): Promise<FakeConnectionHandler> {
+async function mount(attachments?: FakeStore, credentials?: Pick<CredentialProvider, 'resolve'>): Promise<FakeConnectionHandler> {
   const ctx = new Context()
   ctx.provide('llm', { registerAdapter: () => Object.assign(() => {}, { replace: () => {} }) })
   const fake = createFakeConnection()
   ctx.provide('connection', fake.connection)
   if (attachments !== undefined) ctx.provide('attachments', attachments)
-  if (credentials !== undefined) ctx.provide('credentials', credentials as never)
+  if (credentials !== undefined) ctx.provide('credentials', credentials as CredentialProvider)
   ctx.plugin(plugin, { providers: ['codex'] })
   await new Promise(resolve => setTimeout(resolve, 50))
   assert.ok(fake.registered(), 'the subscriptions-auth routes were registered')
@@ -41,7 +47,7 @@ async function mount(attachments?: FakeStore, credentials?: { resolve(ref: strin
 
 test('usage-only RPC reports key presence and rejects unknown sources without exposing secrets', async () => {
   const handler = await mount(undefined, {
-    resolve: async ref => ref === 'OPENCODE_GO_API_KEY' ? { value: 'go-secret' } : undefined,
+    resolve: async ref => ref === 'OPENCODE_GO_API_KEY' ? { value: 'go-secret', source: 'env' } : undefined,
   })
   const signal = new AbortController().signal
   const status = await handler('externalStatus', {}, signal)
@@ -192,6 +198,8 @@ test('video endpoint: name validation and missing file', async () => {
 })
 
 test('speed endpoints: per-session tier round trip and payload validation', async () => {
+  // Logged in, `speed` would fetch the real Codex catalog for its fast models.
+  assert.equal(existsSync(authFile), false, 'another test left a signed-in auth store behind')
   const handler = await mount()
   const signal = new AbortController().signal
   // Logged out and undiscovered: standard tier, no fast-capable models.
@@ -234,14 +242,13 @@ test('speed endpoints: per-session tier round trip and payload validation', asyn
   }
 })
 
-test('status endpoint: one corrupt provider entry degrades alone, others still report', async () => {
+test('status endpoint: one corrupt provider entry degrades alone, others still report', async (t) => {
   // The exact corruption seen in the wild: empty tokens under a claude key.
   // Before the fix this rejected the WHOLE status call and the UI sat on
   // "Checking…" forever with every provider blind.
-  const { mkdirSync: mkDir } = await import('node:fs')
-  const home = process.env.DSH_HOME as string
-  mkDir(join(home, 'plugins', 'subscriptions'), { recursive: true })
-  writeFileSync(join(home, 'plugins', 'subscriptions', 'auth.json'), JSON.stringify({
+  mkdirSync(join(authFile, '..'), { recursive: true })
+  t.after(() => { rmSync(authFile, { force: true }) })
+  writeFileSync(authFile, JSON.stringify({
     codex: { default: 'acct-1', accounts: { 'acct-1': {
       accessToken: 'at', refreshToken: 'rt', expiresAt: Date.now() + 3600_000, accountId: 'acct-1',
     } } },

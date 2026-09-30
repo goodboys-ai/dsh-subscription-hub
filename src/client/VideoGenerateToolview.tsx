@@ -163,7 +163,7 @@ const styles: Record<string, CSSProperties> = {
   error: { margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-state-error-primary)' },
   video: {
     display: 'block', maxWidth: 480, width: '100%', borderRadius: 8,
-    backgroundColor: 'var(--dsw-alias-fill-tertiary)',
+    backgroundColor: 'var(--dsw-alias-bg-skeleton)',
   },
 }
 

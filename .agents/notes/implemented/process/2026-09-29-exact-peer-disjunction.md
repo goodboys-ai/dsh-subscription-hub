@@ -21,10 +21,10 @@ The six DSH peers — `@deepseek-ai/dsh-attachment`, `dsh-credentials`,
 **exact-version disjunction** (`0.1.7-rc.2 || 0.2.0-rc.1`), not a range and
 not an exact pin. Two companion rules keep the disjunction honest:
 
-- A disjunct reaches `main` only after the full gate (build + test suite +
-  L1 host-export check + L2 boot smoke) goes green on that DSH version, and
+- A disjunct reaches `main` only after the full gate (build, test suite,
+  host-export and host contract checks, boot smoke, host E2E) goes green on that DSH version, and
   is removed when the support window drops it. The PR that adds the version
-  to `dsh-versions.txt` adds the disjunct too, because L2 cannot install the
+  to `dsh-versions.txt` adds the disjunct too, because the boot smoke cannot install the
   tarball on a DSH version its peers reject; that PR merges only when green.
   The disjunction on `main` therefore lists exactly the gated versions — no
   more, no fewer.
@@ -72,7 +72,7 @@ One release installs across the whole window, and the plugin version no
 longer tracks DSH minor lines. Supporting a new DSH RC is a process —
 detect → propose disjunct → gate → merge → tag — never optimism. The cost is
 discipline: the disjunction is only as honest as the gate behind it, which
-is why L2 installs the packed tarball on every listed version rather than
+is why the boot smoke installs the packed tarball on every listed version rather than
 trusting the package manager's solver. If the window ever needs narrowing
 (e.g. a DSH line goes end-of-life), removing a disjunct is the same gated
 decision in reverse.

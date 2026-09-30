@@ -6,19 +6,23 @@
  */
 
 import { test } from 'node:test'
+import type { TestContext } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { accountCatalogStore, catalogStore, sanitizeSnapshot } from '../src/providers/catalog-store.js'
 
-async function tempStorePath(): Promise<string> {
-  return join(await mkdtemp(join(tmpdir(), 'dsh-models-')), 'models.json')
+async function tempStorePath(t: TestContext): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-models-'))
+  // Registered before the caller's first assertion so a failure cannot strand the dir.
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  return join(dir, 'models.json')
 }
 
-test('catalog store round-trips per-provider snapshots in one file', async () => {
-  const path = await tempStorePath()
+test('catalog store round-trips per-provider snapshots in one file', async (t) => {
+  const path = await tempStorePath(t)
   const grok = catalogStore('grok', path)
   const codex = catalogStore('codex', path)
   await grok.save({
@@ -50,8 +54,8 @@ test('catalog store round-trips per-provider snapshots in one file', async () =>
   JSON.parse(await readFile(path, 'utf8'))
 })
 
-test('catalog store round-trips output token limits', async () => {
-  const path = await tempStorePath()
+test('catalog store round-trips output token limits', async (t) => {
+  const path = await tempStorePath(t)
   const snapshot = {
     at: 123,
     models: [
@@ -65,8 +69,8 @@ test('catalog store round-trips output token limits', async () => {
   assert.deepEqual(await catalogStore('grok', path).load(), snapshot)
 })
 
-test('catalog store accepts old caches without output token limits', async () => {
-  const path = await tempStorePath()
+test('catalog store accepts old caches without output token limits', async (t) => {
+  const path = await tempStorePath(t)
   const snapshot = { at: 123, models: [{ id: 'g', name: 'G', contextWindow: 500_000 }] }
   await writeFile(path, JSON.stringify({ grok: snapshot }))
   const loaded = await catalogStore('grok', path).load()
@@ -89,8 +93,8 @@ test('sanitizeSnapshot rejects invalid output token limits', () => {
   }
 })
 
-test('catalog store tolerates missing and corrupt files', async () => {
-  const path = await tempStorePath()
+test('catalog store tolerates missing and corrupt files', async (t) => {
+  const path = await tempStorePath(t)
   const store = catalogStore('grok', path)
   // Missing file reads as absent; clear on a missing file is a no-op.
   assert.equal(await store.load(), undefined)
@@ -157,8 +161,8 @@ test('sanitizeSnapshot drops malformed snapshots wholesale', () => {
   }
 })
 
-test('account catalog store keeps per-account snapshots apart from the provider entry', async () => {
-  const path = await tempStorePath()
+test('account catalog store keeps per-account snapshots apart from the provider entry', async (t) => {
+  const path = await tempStorePath(t)
   const provider = catalogStore('codex', path)
   const key = '["379d","user","user-m09"]'
   const account = accountCatalogStore('codex', key, path)
@@ -180,8 +184,8 @@ test('account catalog store keeps per-account snapshots apart from the provider 
   assert.deepEqual((await other.load())?.models.map(model => model.id), ['gpt-5.5'], 'clearing the provider entry keeps account snapshots')
 })
 
-test('account catalog store treats a malformed accounts section as absent', async () => {
-  const path = await tempStorePath()
+test('account catalog store treats a malformed accounts section as absent', async (t) => {
+  const path = await tempStorePath(t)
   await writeFile(path, JSON.stringify({ codex: { at: 1, models: [{ id: 'a', name: 'A' }] }, accounts: [] }))
   const account = accountCatalogStore('codex', 'x', path)
   assert.equal(await account.load(), undefined)

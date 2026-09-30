@@ -52,7 +52,8 @@ comparison is incomplete, not evidence of a cache miss.
 
 ## Automated validation
 
-- Tests are registered in `test/index.ts` and run under `pnpm test`.
+- The tests run under `pnpm test`. (At the time they were registered in
+  `test/index.ts`; the runner now discovers `test/**/*.spec.ts` directly.)
 - Helper tests cover deterministic mapping, distinct IDs, existing UUIDs,
   and fresh IDs for missing/empty input.
 - Adapter dispatch tests cover repeat/different/missing/empty session IDs,

@@ -1,5 +1,5 @@
 /**
- * L3 virtual-provider integration test: Grok (see docs/testing.md).
+ * Virtual-provider integration test: Grok (see docs/testing.md).
  *
  * The whole Grok route runs against {@link installFakeGrok}'s virtual
  * backend — no credentials, no browser, no network. What is REAL in every
@@ -33,6 +33,7 @@ import {
   grokFlow,
   grokTierName,
   refreshGrok,
+  resetGrokDiscoveryForTests,
 } from '../src/providers/grok.js'
 import {
   FAKE_GROK_AUTHORIZE_URL,
@@ -80,10 +81,11 @@ async function virtualLogin(t: TestContext): Promise<VirtualLogin> {
 }
 
 test('grok: full OAuth login flow against the virtual provider', async (t) => {
+  // grokDiscovery() caches at module level; start empty so this test sees
+  // the discovery fetch in any test order.
+  resetGrokDiscoveryForTests()
   const { fake, session, attempt } = await virtualLogin(t)
   assert.ok(fake.issuedCodes.size <= 1, 'the issued code was consumed by the exchange')
-  // This is the first test in the file, so it populates grokDiscovery()'s
-  // module-level cache: the discovery document must have been fetched here.
   assert.ok(
     fake.calls.some(call => call.url === GROK_DISCOVERY_URL),
     'the login fetched the OIDC discovery document',

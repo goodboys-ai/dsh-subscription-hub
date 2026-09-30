@@ -6,6 +6,9 @@ import { tmpdir } from 'node:os'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { Context } from '@deepseek-ai/cordis'
 import type { AccountAwareAdapter } from '../src/providers/accounts.js'
+import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
+
+type Agent = NonNullable<ToolRunContext['agent']>
 import { CodexAdapter } from '../src/providers/codex.js'
 import { saveAccountSession } from '../src/auth/store.js'
 import * as plugin from '../src/index.js'
@@ -61,7 +64,7 @@ test('provider settings RPC edits picker visibility without losing the editor ca
     const create = (at: number) => {
       const denied: string[] = []
       const agent = { session: { header: { createdAt: at } }, ctx: { tools: { restrict: ({ deny }: { deny: string[] }) => { denied.push(...deny) } } } }
-      ctx.emit('agent/created', { agent: agent as never, source: 'startup' })
+      ctx.emit('agent/created', { agent: agent as unknown as Agent, source: 'startup' })
       return denied
     }
     const old = create(Date.now() - 1000)

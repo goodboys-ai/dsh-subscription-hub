@@ -104,8 +104,8 @@ pnpm test
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR workflow, test boundaries,
 and isolated DSH checks.
 
-Test layers (unit, host-export contract, boot smoke, virtual-provider
-integration) are documented in [docs/testing.md](docs/testing.md); the DSH
+The tests and checks (unit and integration tests, the host-export and host
+contract checks, the boot smoke, and the host E2E) are documented in [docs/testing.md](docs/testing.md); the DSH
 support window and release process in
 [docs/compatibility.md](docs/compatibility.md).
 
