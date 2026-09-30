@@ -1,0 +1,129 @@
+name: Release
+
+# Tag-driven release: pushing a `v*` tag auto-creates the GitHub Release.
+# The tag MUST equal package.json `version`, MUST point at a commit on
+# origin/main (releases ride the PR flow), and MUST carry a green `CI gate`
+# check-run — the v* tag ruleset (id 24254540) then makes both immutable.
+#
+# Release notes = the mechanical DSH compatibility section (rendered from
+# dsh-versions.txt + package.json) plus GitHub auto-generated PR/commit
+# notes. Versions whose number contains `-` are marked prerelease.
+#
+# npm publishing is deliberately out of scope here; a follow-up PR adds it.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify tag matches package.json version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          echo "package.json version: ${expected#v}"
+          echo "pushed tag:           ${TAG}"
+          if [ "${TAG}" != "${expected}" ]; then
+            echo "::error::Tag ${TAG} does not match package.json version ${expected#v} (expected ${expected}). Bump package.json in the release PR, merge, and tag the merge commit."
+            exit 1
+          fi
+      - name: Verify tag is on origin/main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${{ github.ref_name }}" origin/main; then
+            echo "::error::Tag ${{ github.ref_name }} is not an ancestor of origin/main. Releases must ride the PR flow: tag the merge commit on main."
+            exit 1
+          fi
+
+  gate-evidence:
+    # Prove the gate is green for this exact tree. CI runs on pushes to
+    # main, so the merge commit a tag points at has its own check-runs:
+    # require the `CI gate` check-run on the tagged SHA to be `success`
+    # instead of re-running the per-version matrix. The light sanity below
+    # still runs inline on the tag itself as a backstop.
+    name: Gate evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require green CI gate check-run on the tagged SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          sha="$(git rev-parse "${TAG}^{commit}")"
+          echo "check-runs for ${TAG} (${sha}):"
+          gh api "repos/${REPO}/commits/${sha}/check-runs" --jq \
+            '.check_runs[] | "\(.name)\t\(.conclusion // .status)"'
+          gate="$(gh api "repos/${REPO}/commits/${sha}/check-runs" --jq \
+            '[.check_runs[] | select(.name == "CI gate")] | last | .conclusion // "missing"')"
+          if [ "${gate}" != "success" ]; then
+            echo "::error::No successful CI gate check-run on ${sha} (found: ${gate}). Merge the release PR and wait for CI on main before tagging."
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Light tag sanity
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm test
+          node scripts/verify-agent-notes.mjs
+          node scripts/check-compat-docs.mjs
+
+  release:
+    name: Create GitHub Release
+    needs: [verify, gate-evidence]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Guard against rerun
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh release view "${TAG}" --repo "${REPO}" >/dev/null 2>&1; then
+            echo "::error::Release ${TAG} already exists. Tags are immutable (v* ruleset), so a rerun means something odd happened — investigate instead of recreating."
+            exit 1
+          fi
+      - name: Render compatibility section
+        run: node scripts/render-release-compat.mjs "${{ github.ref_name }}" > compat.md
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/${REPO}/releases/generate-notes" -f tag_name="${TAG}" --jq .body > autonotes.md
+          cat compat.md autonotes.md > notes.md
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          prerelease_flag=""
+          if [[ "${TAG#v}" == *-* ]]; then
+            prerelease_flag="--prerelease"
+          fi
+          gh release create "${TAG}" --repo "${REPO}" --title "${TAG}" --notes-file notes.md ${prerelease_flag}

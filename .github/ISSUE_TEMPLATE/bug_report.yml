@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a bug in dsh-subscription-hub
+labels: [bug]
+body:
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DSH version
+      description: Find it in the host footer (e.g. `0.2.0-rc.2`).
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version or install ref
+      description: The release tag you installed (e.g. `v0.1.0`) or the install ref.
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: DSH profile
+      options:
+        - web
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log output, if any.
+      render: shell
+    validations:
+      required: false

@@ -175,11 +175,21 @@ not pre-created.
    (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`, currently `0.1.7-rc.2`) need.
    If this fails, fix it through another PR before tagging.
 5. **Publish from `main`.** Create `vX.Y.Z` at the checked merge commit and
-   publish a GitHub Release with the supported DSH versions, completed live
-   checks, known limits, and pinned install command. Mark prerelease versions
-   as GitHub prereleases. Keep `private: true` in `package.json`; users
-   install from GitHub source, not npm. This process is manual today; no
-   release workflow publishes tags or assets.
+   push it. The `v*` tag ruleset (id 24254540) makes tags immutable — never
+   move or reuse one. Pushing the tag triggers `release.yml`, which verifies
+   the tag equals `package.json` `version`, that the tagged commit is an
+   ancestor of `origin/main`, and that the tagged SHA carries a green `CI
+   gate` check-run (CI runs on main pushes, so the merge commit has its own
+   check-runs; the workflow also runs a light inline sanity on the tag).
+   It then auto-creates the GitHub Release — title = tag, prerelease when the
+   version contains `-` — with the mechanical `## DSH compatibility`
+   section (rendered from `dsh-versions.txt` and `package.json` by
+   `scripts/render-release-compat.mjs`) above the auto-generated PR/commit
+   notes. Manual fallback if the workflow is unavailable:
+   `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`, adding
+   `--prerelease` for prerelease versions. Each release also adds one terse
+   section to `CHANGELOG.md`. Keep `private: true` in `package.json`; users
+   install from GitHub source, not npm.
 
 ## What this policy deliberately does not promise
 
