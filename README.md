@@ -23,7 +23,7 @@ reported quota in **Settings → Subscriptions**.
   image generation and editing, and Grok video generation when the matching
   provider is enabled.
 
-## Install from GitHub
+## Install
 
 Current source is tested with DSH `0.1.7-rc.2`, `0.2.0-rc.1`, and
 `0.2.0-rc.2`. The package's peers admit `>=0.1.7-rc.2 <0.3.0-0`: untested
@@ -31,21 +31,28 @@ versions inside that range install but are unsupported, and versions outside
 it need an explicit `dsh plugin allow-version` exemption. See
 [docs/compatibility.md](docs/compatibility.md)
 for the support window and [docs/testing.md](docs/testing.md) for the test
-layers. With `dsh` available, install the plugin into the web profile:
+layers. With `dsh` available, install the plugin into the web profile from
+npm:
+
+```sh
+dsh plugin --profile web add @goodboys-ai/dsh-subscription-hub
+```
+
+Or from GitHub source:
 
 ```sh
 dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub
 ```
 
 Git installs run this package's `prepare` script to build the host and browser
-bundles. If the install stops with `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`
+bundles. If a Git install stops with `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`
 (DSH `0.1.7-rc.2` does this by default), add this package to the web
 profile's `pnpm-workspace.yaml` (`~/.dsh/profiles/web/` unless `DSH_HOME` is
 set) and repeat the command:
 
 ```yaml
 allowBuilds:
-  dsh-subscription-hub: true
+  '@goodboys-ai/dsh-subscription-hub': true
 ```
 
 Restart `dsh web` after installation. Open **Settings → Subscriptions** to
@@ -54,11 +61,12 @@ quota. The session footer quota pill can be shown or hidden there for the
 current browser. OpenCode Go and Kimi Code cards show usage when their API
 keys are configured in **Settings → Models**.
 
-To update a GitHub installation, run the same `dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub` command again and restart `dsh web`.
+To update an installation, run the same `dsh plugin --profile web add` command again and restart `dsh web`.
 
-Without a `#vX.Y.Z` suffix, the command installs the current default branch
-at install time. Once a versioned tag is published, append its tag to the
-GitHub spec to pin an installation; see the
+Without a version suffix, the npm command installs the `latest` dist-tag and
+the GitHub command installs the current default branch at install time. Pin
+a release by appending `@<version>` to the npm spec or the tag to the GitHub
+spec (`#vX.Y.Z`); see the
 [release policy](docs/compatibility.md#plugin-versioning).
 
 ## Verification and limits
@@ -111,7 +119,7 @@ contract checks, the boot smoke, and the host E2E) are documented in [docs/testi
 support window and release process in
 [docs/compatibility.md](docs/compatibility.md).
 
-The package is private to prevent npm publication; GitHub source installation is supported. The `cordis.patch.yml` bundle entry and browser module ID use this project's package name, `dsh-subscription-hub`.
+The package is published to npm as `@goodboys-ai/dsh-subscription-hub` (GitHub source installation remains supported). The `cordis.patch.yml` bundle entry and browser module ID use the short project name, `dsh-subscription-hub`.
 
 ## Origins
 

@@ -7,9 +7,11 @@ name: Release
 #
 # Release notes = the mechanical DSH compatibility section (rendered from
 # dsh-versions.txt + package.json) plus GitHub auto-generated PR/commit
-# notes. Versions whose number contains `-` are marked prerelease.
+# notes. Versions whose number contains `-` are marked prerelease and
+# publish to npm under the `alpha` dist-tag.
 #
-# npm publishing is deliberately out of scope here; a follow-up PR adds it.
+# npm publishing uses OIDC trusted publishing (no tokens); see the
+# npm-publish job below and docs/compatibility.md.
 
 on:
   push:
@@ -137,3 +139,68 @@ jobs:
             prerelease_flag="--prerelease"
           fi
           gh release create "${TAG}" --repo "${REPO}" --title "${TAG}" --notes-file notes.md ${prerelease_flag}
+
+  # npm publishing via OIDC trusted publishing — no tokens anywhere. The
+  # trusted publisher is configured on npmjs.com for repo
+  # goodboys-ai/dsh-subscription-hub + workflow release.yml + no environment;
+  # a mismatch there fails the publish with E404/E403 (see
+  # docs/compatibility.md). Runs in parallel with `release` so an npm failure
+  # never blocks the GitHub Release; recovery is re-running just this job.
+  # The first publish ever is manual (npm requires the package to exist
+  # before a trusted publisher can be configured); the idempotency check
+  # below skips versions npm already has.
+  npm-publish:
+    name: Publish to npm
+    needs: [verify, gate-evidence]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+      - name: Ensure npm >= 11.5.1
+        run: |
+          npm install -g npm@latest
+          npm -v
+      - name: Install and build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Skip when npm already has this version
+        id: skip-check
+        run: |
+          set -euo pipefail
+          v="$(node -p "require('./package.json').version")"
+          stdout_file="$(mktemp)"
+          stderr_file="$(mktemp)"
+          exit_code=0
+          npm view "@goodboys-ai/dsh-subscription-hub@${v}" version >"$stdout_file" 2>"$stderr_file" || exit_code=$?
+          if [ "$exit_code" -eq 0 ] && [ "$(cat "$stdout_file")" = "${v}" ]; then
+            echo "npm already has @goodboys-ai/dsh-subscription-hub@${v}; skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "$exit_code" -ne 0 ] && grep -qiE 'E404|Not Found' "$stderr_file"; then
+            echo "npm does not have ${v}; proceeding."
+          else
+            echo "::error::npm view failed unexpectedly (exit ${exit_code}): $(cat "$stderr_file")"
+            exit 1
+          fi
+          rm -f "$stdout_file" "$stderr_file"
+      # `prepublishOnly` (pnpm build && pnpm test) re-runs inside `npm publish`
+      # after the explicit build above — intentional: provenance rebuild + test
+      # at publish time. Do not "optimize" it away.
+      - name: Publish to npm
+        if: steps.skip-check.outputs.skip != 'true'
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          tag_flag=""
+          if [[ "${v}" == *-* ]]; then
+            tag_flag="--tag alpha"
+          fi
+          npm publish --provenance --access public ${tag_flag}

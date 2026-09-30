@@ -84,8 +84,8 @@ const lines = [
   '',
   `- Tested with DSH: ${window.join(', ')}.`,
   `- Installable (peer range): \`${range}\`.`,
-  '- Versions inside the range but outside the tested window install without the gate; use them at your own risk. Versions outside the range are rejected at install unless granted an exact exemption: `dsh plugin --profile web allow-version dsh-subscription-hub@<ver> --dsh-version <exact> --accept-risk`.',
-  `- Install this release: \`dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#${tag}\`.`,
+  '- Versions inside the range but outside the tested window install without the gate; use them at your own risk. Versions outside the range are rejected at install unless granted an exact exemption: `dsh plugin --profile web allow-version @goodboys-ai/dsh-subscription-hub@<ver> --dsh-version <exact> --accept-risk`.',
+  `- Install this release: \`dsh plugin --profile web add @goodboys-ai/dsh-subscription-hub@${pkgVersion}\` (or from source: \`dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#${tag}\`).`,
   '',
 ]
 

@@ -9,4 +9,4 @@
 #   pnpm dsh --profile headless --patch <this-checkout>/overlay.yml "task"
 - insert:
     - id: llm-subscriptions
-      name: dsh-subscription-hub
+      name: '@goodboys-ai/dsh-subscription-hub'
