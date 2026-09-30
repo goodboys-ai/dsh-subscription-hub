@@ -14,12 +14,16 @@
 //   4. The usage pill renders inside the host's stats row
 //      (`data-composer-stats`), and its dialog shows each source's name
 //      with that source's own percentage.
-//   5. No slot entry crashed, no host contract lookup missed, and the page
+//   5. The plugin's settings section renders inside the host's settings
+//      panel: nav entry, intro copy, provider cards for the signed-in
+//      fixture profile, the usage-display control, and the preference it
+//      writes survives a reload.
+//   6. No slot entry crashed, no host contract lookup missed, and the page
 //      threw no uncaught exception.
-//   6. Every provider request from the server was a planned fixture
+//   7. Every provider request from the server was a planned fixture
 //      (FIXTURE_REQUESTS, exact method and URL) carrying the fixture
 //      credential, or a planned refusal (EXPECTED_REFUSALS).
-//   7. The page itself requested nothing outside loopback. Chrome runs
+//   8. The page itself requested nothing outside loopback. Chrome runs
 //      without the Node preload, so the driver fences it instead: every
 //      proxied request goes to a dead local port, every hostname other than
 //      localhost fails to resolve, and background networking is off. The
@@ -88,14 +92,17 @@ process.on('unhandledRejection', exitFor)
 // Loaded here rather than imported statically, so a missing or unreadable
 // module is a harness failure (exit 2) instead of Node's own exit 1.
 let CODEX_MODEL, CODEX_PILL, CODEX_REPLY, EXPECTED_REFUSALS, FIXTURE_REQUESTS, USAGE_PERCENT
-let HOST_CONTRACT, HOST_CONTRACT_MISS
+let HOST_CONTRACT, HOST_CONTRACT_MISS, SECTION_EN
 
 try {
   ;({
     CODEX_MODEL, CODEX_PILL, CODEX_REPLY, EXPECTED_REFUSALS, FIXTURE_REQUESTS, USAGE_PERCENT,
   } = await import('./host-e2e-fixture.mjs'))
-  // Node strips the types from this dependency-free module; see its header.
+  // Node strips the types from these dependency-free modules; see their headers.
   ;({ HOST_CONTRACT, HOST_CONTRACT_MISS } = await import(join(root, 'src/client/host-contract.ts')))
+  // Section copy is asserted in the host UI, so the driver reads the same
+  // dictionary the component renders and the unit specs assert against.
+  ;({ en: SECTION_EN } = await import(join(root, 'src/client/locales.ts')))
   mkdirSync(artifactDir, { recursive: true })
   const cookies = readCookies(readFileSync(jarPath, 'utf8'))
   if (cookies.length === 0) throw new HarnessFailure('the session cookie jar is empty')
@@ -434,10 +441,143 @@ async function drive(cdp, page) {
   }
   console.log('ok: usage dialog lists every source with its fixture percentage')
 
+  // Product: the settings section renders inside the host's settings panel
+  // and its display preference persists across a reload.
+  await pressKey(cdp, 'Escape', 27)
+  await delay(400)
+  await checkSettingsSection(cdp)
+
   // Product: nothing crashed along the way.
   const problems = await pageProblems(cdp, page)
   if (problems.length > 0) throw new ProductFailure(`${PAGE_ERRORS}:\n  ${problems.join('\n  ')}`)
   console.log('ok: no slot crash, host contract miss, uncaught page error, or page request outside loopback')
+}
+
+/**
+ * The plugin's settings section inside the host's settings panel. Opens the
+ * panel through the host's settings trigger, navigates to the Subscriptions
+ * section, and asserts the rendered copy and controls against the same
+ * locale dictionary the component reads (SECTION_EN) and the unit specs
+ * assert against. Then flips the usage-display preference to Hidden,
+ * asserts the write landed in localStorage, reloads the page, and asserts
+ * the control still reads Hidden — the persistence contract the
+ * `usage-badge-preferences` unit spec proves at the helper layer.
+ *
+ * The settings panel is `div[role="dialog"][aria-modal="true"]` with a nav
+ * rail; the section body renders inside `div[data-slot="settings.section"]`
+ * (the slot outlet anchor). The usage dialog from the pill assertions is
+ * also `role="dialog"` but never carries `aria-modal`, so the selector
+ * scopes to the settings panel on both gated host versions.
+ */
+async function checkSettingsSection(cdp) {
+  const t = SECTION_EN
+  const panel = 'div[role="dialog"][aria-modal="true"]'
+  const outlet = `${panel} [data-slot="settings.section"]`
+
+  // Harness: open the settings panel through the host's trigger.
+  if (!await clickLabel(cdp, ['Settings', '设置'])) throw new HarnessFailure('the settings trigger did not open the panel')
+  if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(panel)}) !== null)()`, 10_000)) {
+    throw new ProductFailure('the host settings panel did not open')
+  }
+
+  // Harness: navigate to the plugin's section. The nav lists every
+  // registered section; the plugin's entry is labeled from its dictionary.
+  if (!await clickLabel(cdp, [t.nav, '订阅'])) throw new HarnessFailure(`the settings nav has no ${t.nav} entry`)
+  if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(outlet)}) !== null)()`, 10_000)) {
+    throw new ProductFailure(`the ${t.nav} section did not render inside the settings panel`)
+  }
+
+  // Product: the section copy, provider cards, and display control render
+  // with the dictionary's wording. The fixture profile signs every provider
+  // in, so each card reports one connected account; that line arrives with
+  // the section's status RPC, so poll until it lands and judge the last
+  // snapshot when the deadline passes.
+  const missingExpression = `(() => {
+    const scope = document.querySelector(${JSON.stringify(outlet)})
+    if (scope === null) return ['section outlet missing']
+    const text = scope.textContent ?? ''
+    const wanted = [
+      ${JSON.stringify(t.intro)},
+      ${JSON.stringify(t.usageBadgeDisplay)},
+      ${JSON.stringify(t.usageBadgeDisplayRecent)},
+      ${JSON.stringify(t.usageBadgeDisplayHidden)},
+      ${JSON.stringify(t.usageBadgeDisplayHint)},
+      'Codex (ChatGPT)', 'Claude', 'Grok (X Premium)', 'GitHub Copilot', 'Google Antigravity',
+      ${JSON.stringify(t.loggedInCount.replace('{count}', '1'))},
+      ${JSON.stringify(t.cursorTitle)},
+      'OpenCode Go', 'Kimi Code',
+      ${JSON.stringify(t.externalUsageConnected)},
+    ]
+    return wanted.filter(line => !text.includes(line))
+  })()`
+  let missing = []
+  const deadline = Date.now() + DIALOG_SETTLE_MS
+  for (;;) {
+    missing = await cdp.evaluate(missingExpression)
+    if (missing.length === 0 || Date.now() >= deadline) break
+    await delay(250)
+  }
+  if (missing.length > 0) {
+    throw new ProductFailure(`the ${t.nav} section is missing rendered copy:\n  ${missing.join('\n  ')}`)
+  }
+  console.log(`ok: settings section ${t.nav} renders intro, provider cards, and the display control`)
+
+  // Product: the display control is a select bound to the preference the
+  // unit spec covers; flipping it persists to localStorage.
+  const select = `document.querySelector(${JSON.stringify(`${outlet} select[aria-label="${t.usageBadgeDisplay}"]`)})`
+  if (!await waitFor(cdp, `(() => ${select} !== null)()`, 10_000)) {
+    throw new ProductFailure(`the ${t.usageBadgeDisplay} select did not render`)
+  }
+  const options = await cdp.evaluate(`(() => [...${select}.options].map(option => ({ value: option.value, text: option.textContent })))()`)
+  const expectedOptions = [
+    { value: 'recent', text: t.usageBadgeDisplayRecent },
+    { value: 'hidden', text: t.usageBadgeDisplayHidden },
+  ]
+  if (JSON.stringify(options) !== JSON.stringify(expectedOptions)) {
+    throw new ProductFailure(`the ${t.usageBadgeDisplay} select options are ${JSON.stringify(options)}, expected ${JSON.stringify(expectedOptions)}`)
+  }
+  await setSelectValue(cdp, select, 'hidden')
+  const stored = await cdp.evaluate(`window.localStorage.getItem('dsh.subscriptions.usageBadgeMode')`)
+  if (stored !== 'hidden') {
+    throw new ProductFailure(`flipping the display control stored ${JSON.stringify(stored)}, expected "hidden"`)
+  }
+  console.log('ok: the display control persists Hidden to localStorage')
+
+  // Product: the preference survives a reload. The section mounts with the
+  // stored value; no save action exists because the control autosaves.
+  await Promise.all([cdp.waitEvent('Page.loadEventFired'), cdp.send('Page.navigate', { url: origin })])
+  if (!await waitFor(cdp, hasText('Send message'), 30_000)) throw new HarnessFailure('web UI did not show a composer after reload')
+  await dismissOnboarding(cdp)
+  if (!await clickLabel(cdp, ['Settings', '设置'])) throw new HarnessFailure('the settings trigger did not reopen the panel after reload')
+  if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(panel)}) !== null)()`, 10_000)) {
+    throw new ProductFailure('the host settings panel did not reopen after reload')
+  }
+  if (!await clickLabel(cdp, [t.nav, '订阅'])) throw new HarnessFailure(`the settings nav lost its ${t.nav} entry after reload`)
+  if (!await waitFor(cdp, `(() => ${select} !== null && ${select}.value === 'hidden')()`, 10_000)) {
+    const value = await cdp.evaluate(`(() => ${select}?.value ?? null)()`)
+    throw new ProductFailure(`after reload the display control reads ${JSON.stringify(value)}, expected "hidden"`)
+  }
+  console.log('ok: the display control still reads Hidden after a reload')
+
+  // Leave the preference at its default so the rest of the run (and the
+  // saved evidence) shows the shipped behavior.
+  await setSelectValue(cdp, select, 'recent')
+  await pressKey(cdp, 'Escape', 27)
+  await delay(400)
+}
+
+/** Set a select's value through the native setter so React's onChange fires. */
+async function setSelectValue(cdp, selectExpression, value) {
+  const changed = await cdp.evaluate(`(() => {
+    const select = ${selectExpression}
+    if (select === null) return false
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+    if (setter === undefined) return false
+    setter.call(select, ${JSON.stringify(value)})
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    return select.value === ${JSON.stringify(value)}
+  })()`)
+  if (changed !== true) throw new HarnessFailure(`could not change the select to ${JSON.stringify(value)}`)
 }
 
 /**
