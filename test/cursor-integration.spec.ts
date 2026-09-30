@@ -27,13 +27,13 @@ import type { ProviderUsage } from '../src/providers/common.js'
 // The vendored transport exposes model discovery at runtime, but the shipped
 // .d.ts only declares the adapter class. Augment it with the narrow surface
 // this test exercises — the real fetchUsableModels, not a reimplementation.
-declare module 'dsh-subscription-hub/cursor-transport' {
+declare module '@goodboys-ai/dsh-subscription-hub/cursor-transport' {
   export function fetchUsableModels(
     accessToken: string,
     options?: { fetch?: typeof fetch; signal?: AbortSignal },
   ): Promise<{ id: string; name: string }[]>
 }
-import { fetchUsableModels } from 'dsh-subscription-hub/cursor-transport'
+import { fetchUsableModels } from '@goodboys-ai/dsh-subscription-hub/cursor-transport'
 import {
   CURSOR_CREDENTIAL_REF,
   CursorAuth,
