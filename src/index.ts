@@ -75,6 +75,7 @@ import { DEFAULT_RATE_LIMIT_MAX_WAIT_MS, resolveRateLimitWait } from './provider
 import type { RateLimitConfig } from './providers/rate-limit.js'
 import { accountCatalogStore, catalogStore } from './providers/catalog-store.js'
 import { ClaudeCliVersionCache } from './providers/claude-cli-version.js'
+import type { CliVersion, NpmCliVersionCache } from './providers/npm-cli-version.js'
 import { CodexClientVersionCache } from './providers/codex-client-version.js'
 import { CodexWebSearchProvider } from './providers/codex-search.js'
 import { PoolAdapter } from './providers/pool.js'
@@ -405,6 +406,8 @@ export class SubscriptionsAuthController implements AuthController {
     private readonly poolUsage: PoolUsageTracker | undefined = undefined,
     /** Antigravity OAuth/runtime configuration. */
     private readonly antigravityConfig: Config['antigravity'] = {},
+    /** The CLI version each route presents, shown beside the provider in Settings. */
+    private readonly clientVersions: Partial<Record<ProviderId, () => Promise<CliVersion | undefined>>> = {},
   ) {}
 
   usage(provider: ProviderId, account: string, signal: AbortSignal, force = false): Promise<ProviderUsage> {
@@ -434,6 +437,7 @@ export class SubscriptionsAuthController implements AuthController {
     const entries = await listAccounts(provider)
     // The plan name is shown by the usage section, so `detail` only carries errors.
     const detail = this.lastError.get(provider)
+    const clientVersion = await this.clientVersions[provider]?.()
     return {
       busy: this.flows.isBusy(provider) || this.deviceFlows.isBusy(provider) || this.finalizing.has(provider),
       accounts: entries.map(({ key, session }, index) => {
@@ -448,6 +452,7 @@ export class SubscriptionsAuthController implements AuthController {
         }
       }),
       ...detail === undefined ? {} : { detail },
+      ...clientVersion === undefined ? {} : { clientVersion },
     }
   }
 
@@ -641,6 +646,33 @@ export class SubscriptionsAuthController implements AuthController {
   async setDefault(provider: ProviderId, account: string): Promise<void> {
     await setDefaultAccount(provider, account)
     this.onAuthChanged(provider, account)
+  }
+}
+
+/** How long the Settings status waits on a CLI version refresh before showing the last one. */
+const STATUS_VERSION_WAIT_MS = 1000
+
+/**
+ * Read the CLI version a route presents for the Settings page. The first
+ * lookup is awaited (bounded by its own 5s deadline) so a slow registry is
+ * not misreported as a fallback; a later refresh is waited on only briefly,
+ * because the whole page waits on `status`, and the last result shows.
+ */
+export function presentedVersion(
+  cache: Pick<NpmCliVersionCache, 'resolve' | 'current'>,
+  waitMs = STATUS_VERSION_WAIT_MS,
+): () => Promise<CliVersion | undefined> {
+  return async () => {
+    if (cache.current() === undefined) {
+      await cache.resolve()
+      return cache.current()
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      cache.resolve(),
+      new Promise<void>(resolve => { timer = setTimeout(resolve, waitMs) }),
+    ]).finally(() => { clearTimeout(timer) })
+    return cache.current()
   }
 }
 
@@ -1155,6 +1187,14 @@ export function apply(ctx: Context, config: Config): void {
   )
   registerAuthRpc(ctx, new SubscriptionsAuthController(
     flows, deviceFlows, authChanged, resolveAttachments, usageFetchers, undefined, poolUsage, config.antigravity,
+    {
+      ...providers.includes('codex') ? {
+        codex: config.codexClientVersion === undefined
+          ? presentedVersion(codexVersion)
+          : async () => ({ version: config.codexClientVersion!, source: 'config' as const }),
+      } : {},
+      ...providers.includes('claude') ? { claude: presentedVersion(claudeVersion) } : {},
+    },
   ), speed, modelDefaults, {
     async get(provider, force) {
       await loadModelDefaults()

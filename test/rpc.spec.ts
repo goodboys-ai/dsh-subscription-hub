@@ -39,7 +39,10 @@ async function mount(attachments?: FakeStore, credentials?: Pick<CredentialProvi
   ctx.provide('connection', fake.connection)
   if (attachments !== undefined) ctx.provide('attachments', attachments)
   if (credentials !== undefined) ctx.provide('credentials', credentials as CredentialProvider)
-  ctx.plugin(plugin, { providers: ['codex'] })
+  // codexClientVersion pins the presented version so `status` never reaches
+  // for the npm registry (the hermetic run blocks it); the config branch is
+  // the deterministic one for a mounted-plugin test.
+  ctx.plugin(plugin, { providers: ['codex'], codexClientVersion: '0.153.4' })
   await new Promise(resolve => setTimeout(resolve, 50))
   assert.ok(fake.registered(), 'the subscriptions-auth routes were registered')
   return fake.handler

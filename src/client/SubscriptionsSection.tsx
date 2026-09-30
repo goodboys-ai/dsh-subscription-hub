@@ -53,6 +53,18 @@ export interface ProviderStatus {
   busy: boolean
   accounts: AccountStatus[]
   detail?: string
+  /** The CLI version the route presents (Codex, Claude), and where it came from. */
+  clientVersion?: { version: string; source: ClientVersionSource }
+}
+
+/** Where a presented CLI version came from; the tag names the source so a stale one is visible. */
+export type ClientVersionSource = 'npm' | 'local' | 'fallback' | 'config'
+
+const CLIENT_VERSION_SOURCES: Record<ClientVersionSource, SubscriptionsKey> = {
+  npm: 'clientVersionNpm',
+  local: 'clientVersionLocal',
+  fallback: 'clientVersionFallback',
+  config: 'clientVersionConfig',
 }
 
 /** `status` endpoint value: the node half owns this shape. */
@@ -161,6 +173,7 @@ const styles: Record<string, CSSProperties> = {
   dot: cardStyles.dot,
   name: cardStyles.name,
   statusLine: cardStyles.status,
+  clientVersion: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)', fontVariantNumeric: 'tabular-nums' },
   errorLine: cardStyles.error,
   actions: cardStyles.actions,
   button: cardStyles.button,
@@ -234,6 +247,20 @@ function statusText(t: SubscriptionsSectionInjected['t'], status: ProviderStatus
   if (status.busy) return t('loginInProgress')
   if (status.accounts.length > 0) return t('loggedInCount', { count: status.accounts.length })
   return t('notLoggedIn')
+}
+
+/**
+ * The CLI version a route presents, beside the provider name; nothing for
+ * routes without one. The source word (npm / local / built-in / configured)
+ * is the fix for upstream issue #108: a failed npm lookup must read as a
+ * fallback, never as a plan limit.
+ */
+export function clientVersionText(
+  t: SubscriptionsSectionInjected['t'],
+  clientVersion: ProviderStatus['clientVersion'],
+): string {
+  if (clientVersion === undefined) return ''
+  return t('clientVersion', { version: clientVersion.version, source: t(CLIENT_VERSION_SOURCES[clientVersion.source]) })
 }
 
 /**
@@ -608,6 +635,11 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
             <div style={styles.cardHeader}>
               <span style={{ ...styles.dot, background: dotColor(status) }} />
               <span style={styles.name}>{name}</span>
+              {status?.clientVersion !== undefined && (
+                <span style={styles.clientVersion} title={t('clientVersionHint')}>
+                  {clientVersionText(t, status.clientVersion)}
+                </span>
+              )}
             </div>
             <p style={styles.statusLine}>{statusText(t, status)}</p>
             {status?.detail !== undefined && status.detail !== '' && (
