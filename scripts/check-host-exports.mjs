@@ -94,8 +94,9 @@ function installHost(version) {
     mkdirSync(dir, { recursive: true })
     const specs = hostPackages().map(name => installSpec(name, version))
     console.log(`installing ${specs.length} @deepseek-ai/* packages for DSH ${version} ...`)
+    // tsc only reads the declarations, so the packages' install scripts never run.
     try {
-      execFileSync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '--legacy-peer-deps', '--prefix', dir, ...specs],
+      execFileSync('npm', ['install', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts', '--legacy-peer-deps', '--prefix', dir, ...specs],
         { stdio: ['ignore', 'inherit', 'pipe'] })
     } catch (error) {
       const stderr = error.stderr?.toString() ?? ''

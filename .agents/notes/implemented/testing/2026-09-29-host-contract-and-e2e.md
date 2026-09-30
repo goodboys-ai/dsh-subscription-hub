@@ -16,7 +16,7 @@ and the boot smoke, and show up only in a user's browser:
   `slot entry crashed in '<slot>'`. The page keeps working and the feature
   is just gone, so nothing reaches the page's error handlers.
 - A slot outlet, DOM marker, or theme token the host drops leaves no error at
-  all. The usage badge's skeleton color used an undefined token
+  all. The video tool view's placeholder background used an undefined token
   (`--dsw-alias-fill-tertiary`) until the manifest check below flagged it.
 
 Hand-made host fakes in unit tests cannot see any of this: they encode what
