@@ -174,14 +174,29 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
       - name: Skip when npm already has this version
+        id: skip-check
         run: |
+          set -euo pipefail
           v="$(node -p "require('./package.json').version")"
-          if [ "$(npm view "@goodboys-ai/dsh-subscription-hub@${v}" version 2>/dev/null)" = "${v}" ]; then
+          stdout_file="$(mktemp)"
+          stderr_file="$(mktemp)"
+          exit_code=0
+          npm view "@goodboys-ai/dsh-subscription-hub@${v}" version >"$stdout_file" 2>"$stderr_file" || exit_code=$?
+          if [ "$exit_code" -eq 0 ] && [ "$(cat "$stdout_file")" = "${v}" ]; then
             echo "npm already has @goodboys-ai/dsh-subscription-hub@${v}; skipping publish."
-            exit 0
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "$exit_code" -ne 0 ] && grep -qiE 'E404|Not Found' "$stderr_file"; then
+            echo "npm does not have ${v}; proceeding."
+          else
+            echo "::error::npm view failed unexpectedly (exit ${exit_code}): $(cat "$stderr_file")"
+            exit 1
           fi
-          echo "npm does not have ${v}; proceeding."
+          rm -f "$stdout_file" "$stderr_file"
+      # `prepublishOnly` (pnpm build && pnpm test) re-runs inside `npm publish`
+      # after the explicit build above — intentional: provenance rebuild + test
+      # at publish time. Do not "optimize" it away.
       - name: Publish to npm
+        if: steps.skip-check.outputs.skip != 'true'
         run: |
           v="$(node -p "require('./package.json').version")"
           tag_flag=""

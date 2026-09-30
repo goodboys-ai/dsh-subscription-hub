@@ -72,6 +72,9 @@ npm provenance. The maintainer owes one manual `0.1.0-rc.0` publish plus the
 npmjs.com trusted-publisher configuration before the first tag; a mismatch
 there fails CI with E404/E403, which the workflow comment names. The
 `alpha` dist-tag policy means prerelease users opt in explicitly while
-`latest` stays stable. The plugin's DSH-facing name (log prefixes, bundle
-entry, browser module ID) stays the short `dsh-subscription-hub` — only the
-npm package name is scoped.
+`latest` stays stable. The `cordis.patch.yml` `insert.name` is a resolved
+module specifier — dsh-app-boot resolves it through
+`node_modules/<name>/package.json` — so it MUST equal the installed (scoped)
+package name `@goodboys-ai/dsh-subscription-hub`; only display/log identities
+(log prefixes, the Cordis `export const name`, browser module ID) stay the
+short `dsh-subscription-hub`.

@@ -120,7 +120,7 @@ if [[ "${SMOKE_ALLOW_BUILDS:-0}" == "1" ]]; then
   # `plugin list` creates the profile and its pnpm-workspace.yaml.
   "$DSH_BIN" plugin --profile web list > /dev/null 2>&1 \
     || { echo "SMOKE SETUP FAILURE: could not create the web profile" >&2; exit 2; }
-  printf 'allowBuilds:\n  dsh-subscription-hub: true\n' >> "$SMOKE_HOME/profiles/web/pnpm-workspace.yaml"
+  printf 'allowBuilds:\n  "@goodboys-ai/dsh-subscription-hub": true\n' >> "$SMOKE_HOME/profiles/web/pnpm-workspace.yaml"
   echo "ok: profile allows this package's prepare script"
 fi
 "$DSH_BIN" plugin --profile web add "$PLUGIN_SOURCE" > "$SMOKE_HOME/plugin-add.log" 2>&1 \
@@ -164,7 +164,7 @@ CODE="$(curl -s -b "$JAR" -o "$APP_HTML" -w '%{http_code}' --max-time 15 "${URL%
 [[ "$CODE" == "200" ]] || fail "web UI answered HTTP $CODE, expected 200"
 # The 0.1.7 preload combo can start with this plugin, but its bare prefix
 # returns 404. Require the standalone manifest URL with its revision.
-BUNDLE_PATH="$(grep -oE 'plugins/\?\?dsh-subscription-hub/client\.js&rev=[[:alnum:]]+' "$APP_HTML" | head -1 || true)"
+BUNDLE_PATH="$(grep -oE 'plugins/\?\?@goodboys-ai/dsh-subscription-hub/client\.js&rev=[[:alnum:]]+' "$APP_HTML" | head -1 || true)"
 [[ -n "$BUNDLE_PATH" ]] || fail "served UI does not include the plugin's client bundle URL"
 BUNDLE_URL="${URL%%\?*}"
 BUNDLE_URL="${BUNDLE_URL%/}/$BUNDLE_PATH"

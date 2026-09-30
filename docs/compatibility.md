@@ -201,9 +201,10 @@ not pre-created.
    for a package that already exists; the CI job takes over from `v0.1.0`
    onward. Manual fallback if the workflow is unavailable:
    `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`, adding
-   `--prerelease` for prerelease versions, and `npm publish --provenance
-   --access public` for npm. The release PR also adds one terse
-   section to `CHANGELOG.md` before the tag is pushed.
+   `--prerelease` for prerelease versions, and `npm publish --access public`
+   for npm (interactive 2FA; provenance is CI-only — `--provenance` requires
+   the OIDC `id-token` a local run does not have). The release PR also adds
+   one terse section to `CHANGELOG.md` before the tag is pushed.
 
 ## What this policy deliberately does not promise
 

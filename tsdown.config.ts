@@ -81,7 +81,7 @@ export default defineConfig({
   }],
   outputOptions: {
     entryFileNames: 'client.js',
-    banner: 'window.__ModuleLoader__.load({ id: "dsh-subscription-hub", factory: (require) => {',
+    banner: 'window.__ModuleLoader__.load({ id: "@goodboys-ai/dsh-subscription-hub", factory: (require) => {',
     footer: 'return module.exports; } });',
     intro: 'var module = { exports: {} }; var exports = module.exports;',
   },
