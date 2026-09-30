@@ -230,6 +230,17 @@ test('login(claude): credentials found → instant import, session persisted', a
   })
 })
 
+test('status reports the CLI version a route presents, only where one is wired', async () => {
+  await inIsolatedHome(async () => {
+    const controller = new SubscriptionsAuthController(
+      new OAuthFlowManager(), new DeviceFlowManager(), () => {}, () => undefined, {}, () => undefined, undefined, {},
+      { codex: async () => ({ version: '0.157.1', source: 'npm' }) },
+    )
+    assert.deepEqual((await controller.status('codex')).clientVersion, { version: '0.157.1', source: 'npm' })
+    assert.equal('clientVersion' in await controller.status('grok'), false)
+  })
+})
+
 test('login(claude): the shipped controller reads the credential store by default', needsFileStore, async () => {
   await inIsolatedHome(async () => {
     const dir = credentialsDir('claude-default-', VALID_BLOB)
@@ -544,7 +555,10 @@ async function mountPlugin(): Promise<FakeConnectionHandler> {
   ctx.provide('llm', { registerAdapter: () => Object.assign(() => {}, { replace: () => {} }) })
   const fake = createFakeConnection()
   ctx.provide('connection', fake.connection)
-  ctx.plugin(plugin, { providers: ['codex'] })
+  // codexClientVersion pins the presented version so `status` never reaches
+  // for the npm registry (the hermetic run blocks it); the config branch is
+  // the deterministic one for a mounted-plugin test.
+  ctx.plugin(plugin, { providers: ['codex'], codexClientVersion: '0.153.4' })
   await new Promise(resolve => setTimeout(resolve, 50))
   assert.ok(fake.registered(), 'the subscriptions-auth routes were registered')
   return fake.handler

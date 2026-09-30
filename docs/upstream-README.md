@@ -1,3 +1,4 @@
+<!-- Snapshot of upstream V1ki/dsh-plugin-subscriptions README.md at v0.9.5 (75a8346, 2026-09-28), with the fork's own edits. Sync state: docs/upstream-sync.md. -->
 # dsh-plugin-subscriptions [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 English | [中文](README.zh.md)
