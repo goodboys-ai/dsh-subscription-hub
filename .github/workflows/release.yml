@@ -18,6 +18,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   verify:
     name: Verify tag
@@ -38,10 +42,12 @@ jobs:
             exit 1
           fi
       - name: Verify tag is on origin/main
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           git fetch origin main
-          if ! git merge-base --is-ancestor "${{ github.ref_name }}" origin/main; then
-            echo "::error::Tag ${{ github.ref_name }} is not an ancestor of origin/main. Releases must ride the PR flow: tag the merge commit on main."
+          if ! git merge-base --is-ancestor "${TAG}" origin/main; then
+            echo "::error::Tag ${TAG} is not an ancestor of origin/main. Releases must ride the PR flow: tag the merge commit on main."
             exit 1
           fi
 
@@ -53,6 +59,9 @@ jobs:
     # still runs inline on the tag itself as a backstop.
     name: Gate evidence
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,12 +72,13 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           sha="$(git rev-parse "${TAG}^{commit}")"
           echo "check-runs for ${TAG} (${sha}):"
           gh api "repos/${REPO}/commits/${sha}/check-runs" --jq \
             '.check_runs[] | "\(.name)\t\(.conclusion // .status)"'
-          gate="$(gh api "repos/${REPO}/commits/${sha}/check-runs" --jq \
-            '[.check_runs[] | select(.name == "CI gate")] | last | .conclusion // "missing"')"
+          gate="$(gh api --method GET "repos/${REPO}/commits/${sha}/check-runs" -F check_name='CI gate' -F filter=latest --jq \
+            '.check_runs[0].conclusion // "missing"')"
           if [ "${gate}" != "success" ]; then
             echo "::error::No successful CI gate check-run on ${sha} (found: ${gate}). Merge the release PR and wait for CI on main before tagging."
             exit 1

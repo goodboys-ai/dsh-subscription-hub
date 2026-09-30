@@ -31,8 +31,9 @@ shared peer range, failing on any peer disagreement), appends
 `releases/generate-notes` output under it, and creates the release with
 title = tag, adding `--prerelease` when the version contains `-`. A rerun
 guard fails when the release already exists, since the `v*` tag ruleset
-(id 24254540) makes tags immutable. Each release also adds one terse section
-to `CHANGELOG.md`.
+(id 24254540) makes tags immutable. The release PR also adds one terse
+section to `CHANGELOG.md` before the tag is pushed; the workflow does not
+touch it.
 
 ## Alternatives considered
 

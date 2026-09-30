@@ -8,9 +8,9 @@
  * contract docs/compatibility.md owns, without hand-editing. The derivation
  * mirrors scripts/check-compat-docs.mjs: the window comes from
  * dsh-versions.txt (comment lines, including the window-rule header, are
- * excluded) and the peer range from the six @deepseek-ai/dsh-* peers, which
- * must all be identical — a disagreement fails loudly instead of shipping a
- * mixed statement.
+ * excluded) and the peer range from package.json, where every
+ * `@deepseek-ai/dsh-*` peer carries the identical range — a disagreement
+ * fails loudly instead of shipping a mixed statement.
  *
  * Usage:
  *   node scripts/render-release-compat.mjs [tag]
@@ -84,7 +84,7 @@ const lines = [
   '',
   `- Tested with DSH: ${window.join(', ')}.`,
   `- Installable (peer range): \`${range}\`.`,
-  '- Versions inside the range but outside the tested window install without the gate; use them at your own risk. Versions outside the range are rejected at install unless granted an exact exemption: `dsh plugin allow-version dsh-subscription-hub@<ver> --dsh-version <exact> --accept-risk`.',
+  '- Versions inside the range but outside the tested window install without the gate; use them at your own risk. Versions outside the range are rejected at install unless granted an exact exemption: `dsh plugin --profile web allow-version dsh-subscription-hub@<ver> --dsh-version <exact> --accept-risk`.',
   `- Install this release: \`dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#${tag}\`.`,
   '',
 ]

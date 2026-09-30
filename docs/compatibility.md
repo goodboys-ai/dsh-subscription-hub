@@ -187,8 +187,9 @@ not pre-created.
    `scripts/render-release-compat.mjs`) above the auto-generated PR/commit
    notes. Manual fallback if the workflow is unavailable:
    `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`, adding
-   `--prerelease` for prerelease versions. Each release also adds one terse
-   section to `CHANGELOG.md`. Keep `private: true` in `package.json`; users
+   `--prerelease` for prerelease versions. The release PR also adds one terse
+   section to `CHANGELOG.md` before the tag is pushed. Keep `private: true`
+   in `package.json`; users
    install from GitHub source, not npm.
 
 ## What this policy deliberately does not promise
