@@ -14,7 +14,7 @@
  * stale.
  *
  * Usage:
- *   node scripts/check-host-exports.mjs --dsh 0.2.0-rc.1
+ *   node scripts/check-host-exports.mjs --dsh 0.2.0-rc.2
  *   node scripts/check-host-exports.mjs --all            # every version in dsh-versions.txt
  *
  * Exit 0 when src compiles against every requested version, 1 when the

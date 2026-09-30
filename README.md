@@ -25,8 +25,10 @@ reported quota in **Settings → Subscriptions**.
 
 ## Install from GitHub
 
-Current source is tested with DSH `0.1.7-rc.2` and `0.2.0-rc.1`; the package
-accepts exactly those two versions as peers. See
+Current source is tested with DSH `0.1.7-rc.2`, `0.2.0-rc.1`, and
+`0.2.0-rc.2`. The package's peers admit `>=0.1.7-rc.2 <0.3.0-0`: untested
+versions inside that range install but are unsupported, and versions outside
+it need an explicit `dsh plugin allow-version` exemption. See
 [docs/compatibility.md](docs/compatibility.md)
 for the support window and [docs/testing.md](docs/testing.md) for the test
 layers. With `dsh` available, install the plugin into the web profile:

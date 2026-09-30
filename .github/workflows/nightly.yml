@@ -97,9 +97,10 @@ jobs:
     # in dsh-versions.txt. A version already in the window is covered by the
     # CI matrix and skipped.
     #
-    # The install would refuse the release tarball on that version, because
-    # its peers are an exact disjunction of the window. This job therefore
-    # packs a nightly-only tarball whose peers also allow the candidate, so
+    # The install may refuse the release tarball on a candidate that sits
+    # outside the peer range (below the floor or on a newer minor line).
+    # This job therefore packs a nightly-only tarball whose peers also allow
+    # the candidate, so
     # the checks answer "would the plugin work if this version joined the
     # window?". The release tarball and package.json peers never change here.
     #

@@ -60,7 +60,7 @@ jobs:
             const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
             const version = process.env.DSH_VERSION
             // Only the build inputs move: peerDependencies are the shipped
-            // exact-version disjunction and must stay identical in every
+            // bounded range and must stay identical in every
             // job, since one packed tarball serves the whole window.
             // cordis and schemastery are versioned independently of DSH.
             const isDshPrerelease = (v) => /^\\d+\\.\\d+\\.\\d+-(alpha|beta|rc)(\\.|$)/.test(String(v).replace(/^[~^]/, ''))

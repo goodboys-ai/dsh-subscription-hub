@@ -2,13 +2,19 @@
 
 Status: implemented
 
+> Superseded by [2026-09-30 Bounded peer range](2026-09-30-bounded-peer-range.md):
+> the six peers moved from an exact-version disjunction to a bounded range
+> (`>=0.1.7-rc.2 <0.3.0-0`). This note survives as the record of the original
+> decision; its core argument — a peer declaration is an install-time-enforced
+> promise — still stands and is why the range keeps both bounds.
+
 ## Problem
 
 DSH is a fast-moving developer preview: every release so far has been a
 prerelease (`-alpha`, `-rc`) and breaking changes between versions are
 routine. One plugin release must install on every DSH version in the support
-window (`dsh-versions.txt` — currently `0.1.7-rc.2` and `0.2.0-rc.1`, the
-newest RC of each existing minor line), but the `@deepseek-ai/*`
+window (`dsh-versions.txt` — `0.1.7-rc.2`, `0.2.0-rc.1`, and `0.2.0-rc.2` at
+the time this note was superseded), but the `@deepseek-ai/*`
 peerDependencies must not promise compatibility with DSH versions the
 compatibility gate has never seen. A peer declaration is a promise the
 package manager enforces at install time; an overbroad promise ships broken
@@ -18,7 +24,7 @@ installs, an overnarrow one rejects working ones.
 
 The six DSH peers — `@deepseek-ai/dsh-attachment`, `dsh-credentials`,
 `dsh-home-paths`, `dsh-llm`, `dsh-tools`, `dsh-web` — are declared as an
-**exact-version disjunction** (`0.1.7-rc.2 || 0.2.0-rc.1`), not a range and
+**exact-version disjunction** (`0.1.7-rc.2 || 0.2.0-rc.2`), not a range and
 not an exact pin. Two companion rules keep the disjunction honest:
 
 - A disjunct reaches `main` only after the full gate (build, test suite,

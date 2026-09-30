@@ -1,10 +1,16 @@
-# Supported DeepSeek Harness versions.
+# Supported DeepSeek Harness versions, one per line, oldest first.
 #
-# Sliding window: the newest RC of each of the latest three DSH minor lines
-# (only 0.1.x and 0.2.x exist so far — see docs/compatibility.md).
+# Window rule: the newest fully gated RC of each of the latest three minor
+# lines; the newest minor line also keeps its immediately preceding gated RC
+# as a transition entry — at most four entries. A version enters only after
+# the full gate passes on it; when a newer gated RC arrives, older RCs of
+# that minor line drop until at most two remain; when a fourth minor line
+# arrives, the oldest minor line drops. See docs/compatibility.md.
 # This file is the single source of truth for:
 #   - the CI matrix (.github/workflows/ci.yml reads it)
 #   - the compatibility table (docs/compatibility.md)
-# Add the new version at the bottom, drop the oldest when the window exceeds three.
+#   - the peer range bounds: the lower bound is the floor below, the upper
+#     bound is the minor line after the newest line below
 0.1.7-rc.2
 0.2.0-rc.1
+0.2.0-rc.2

@@ -13,7 +13,7 @@
 # the host E2E, scripts/host-e2e.sh.
 #
 # Usage:
-#   DSH_VERSION=0.2.0-rc.1 bash scripts/boot-smoke.sh
+#   DSH_VERSION=0.2.0-rc.2 bash scripts/boot-smoke.sh
 #   PLUGIN_SOURCE=/path/to/checkout bash scripts/boot-smoke.sh   # default: this repo
 #   DSH_BIN=/path/to/dsh bash scripts/boot-smoke.sh              # default: the one npx installs for <v>
 #   KEEP_SMOKE_HOME=1 bash scripts/boot-smoke.sh                  # keep the temp profile for inspection

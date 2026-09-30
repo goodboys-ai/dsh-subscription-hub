@@ -12,7 +12,7 @@
  * entry, so the check runs before a user ever sees the page.
  *
  * Usage:
- *   node scripts/check-host-contract.mjs --dsh 0.2.0-rc.1
+ *   node scripts/check-host-contract.mjs --dsh 0.2.0-rc.2
  *   node scripts/check-host-contract.mjs --all      # every version in dsh-versions.txt
  *
  * The bundle check reads lib/client.js, so run `pnpm build` first.

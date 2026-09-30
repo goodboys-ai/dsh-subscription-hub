@@ -8,28 +8,44 @@ how a plugin release is published.
 
 DSH is a fast-moving developer preview: every release so far has been a
 prerelease (`-alpha`, `-rc`) and breaking changes are routine. This plugin
-supports a **sliding window of the latest DSH releases**, defined as the
-newest RC of each of the latest three minor lines. Only two minor lines
-exist so far (`0.1.x`, `0.2.x`), so the window currently holds two versions.
-`dsh-versions.txt` at the repo root is the single source of truth for the
-window; the CI matrix and the table below derive from it.
+supports a **sliding window of gated DSH releases**: the newest fully gated
+RC of each of the latest three minor lines, plus — in the newest minor line
+only — its immediately preceding gated RC as a transition entry, at most
+four versions. Only two minor lines exist so far (`0.1.x`, `0.2.x`), so the
+window currently holds three versions. A version enters the window only
+after the full gate passes on it; when a newer gated RC arrives, older RCs
+of that minor line drop until at most two remain; when a fourth minor line
+arrives, the oldest minor line drops. `dsh-versions.txt` at the repo root
+is the single source of truth for the window; the CI matrix and the table
+below derive from it.
 
-One release covers the whole window: the `@deepseek-ai/*`
-`peerDependencies` are **an exact-version disjunction** listing exactly the
-gated versions (currently `0.1.7-rc.2 || 0.2.0-rc.1`). Add a candidate
-disjunct and its `dsh-versions.txt` entry in the same PR, then merge only
-after the full gate passes on every listed version. Remove a disjunct when
-the window drops that version. The `devDependencies` stay pinned exact at
-the window floor, so the build never uses APIs newer than the oldest
-supported DSH.
-CI packs exactly one tarball from those pinned dependencies and boots that
-same tarball on every DSH version in the window, in both the boot smoke and
-the host E2E — there is no per-version artifact. When the window gains a version, the disjunction gains a disjunct;
-when it drops one, the disjunct is removed — that, not a per-version release
-line, is the maintenance event.
+One release covers the whole window, and the install gate is wider than the
+window by design: the six `@deepseek-ai/dsh-*` `peerDependencies` are **one
+bounded range** (currently `>=0.1.7-rc.2 <0.3.0-0`) whose lower bound is the
+window floor and whose upper bound excludes the minor line after the newest
+gated one. DSH's plugin manager enforces peers at install time with
+`includePrerelease` semver, so the range admits every RC of the gated minor
+lines, including RCs the gate has not run yet; the `-0` suffix on the upper
+bound is load-bearing, because `<0.3.0` would admit `0.3.0-rc.1` while
+`<0.3.0-0` excludes the whole next minor line. Installs on ungated versions
+inside the range succeed but are unsupported (see below); versions outside
+the range are rejected at install unless the user grants an exact
+`dsh plugin allow-version` exemption. When the window adds a version, add
+its `dsh-versions.txt` entry in the same PR and merge only after the full
+gate passes on every listed version; the range bounds move only when the
+floor leaves the window or a new minor line passes the gate — those, not
+per-RC releases, are the maintenance events. The nightly `next-host` job is
+the tripwire for range-admitted untested versions; a red run triggers a PR
+that narrows the range (a lower upper bound or an exclusion disjunct). The
+`devDependencies` stay pinned exact at the window floor, so the build never
+uses APIs newer than the oldest supported DSH. CI packs exactly one tarball
+from those pinned dependencies and boots that same tarball on every DSH
+version in the window, in both the boot smoke and the host E2E — there is
+no per-version artifact.
 
 The rationale lives in agent notes:
-[exact-version peer disjunction](../.agents/notes/implemented/process/2026-09-29-exact-peer-disjunction.md)
+[bounded peer range](../.agents/notes/implemented/process/2026-09-30-bounded-peer-range.md)
+(superseding [exact-version peer disjunction](../.agents/notes/implemented/process/2026-09-29-exact-peer-disjunction.md))
 and [single-tarball CI](../.agents/notes/implemented/testing/2026-09-29-single-tarball-ci.md).
 
 ## What "supported" means
@@ -66,35 +82,41 @@ Status legend:
 - ❌ **known-broken** — the gate is red or a specific incompatibility is
   documented; see the notes column.
 
-Anything outside the window is unsupported: it may work, but CI doesn't check
-it and issues against it are closed as "upgrade or pin".
+Anything outside the window is unsupported. Versions inside the peer range
+but outside the window install and may work, but CI doesn't check them and
+issues against them are closed as "upgrade or wait for the window".
+Versions outside the range are rejected at install unless the user grants an
+exact exemption:
+`dsh plugin --profile web allow-version dsh-subscription-hub@<version> --dsh-version <exact> --accept-risk`.
+That exemption is an at-your-own-risk escape hatch, not support.
 
 ## Compatibility table
 
-Current source version `0.1.0`, peers `0.1.7-rc.2 || 0.2.0-rc.1`. Gate
-results below are from local runs on 2026-09-29; the CI matrix runs the
+Current source version `0.1.0`, peers `>=0.1.7-rc.2 <0.3.0-0`. Gate
+results below are from local runs on 2026-09-30; the CI matrix runs the
 identical gates on every push. A cell becomes ✅ only from a green gate run,
 never from "it should work".
 
 | DSH | build | tests | host exports | host contract | boot smoke | host E2E | Notes |
 |-----|-------|-------|--------------|---------------|------------|----------|-------|
 | `0.1.7-rc.2` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | window floor; devDeps pin here |
-| `0.2.0-rc.1` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | packed-tarball install verified |
+| `0.2.0-rc.1` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | transition entry for the newest line |
+| `0.2.0-rc.2` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | packed-tarball install verified |
 
 The boot smoke and host E2E installed the packed tarball (no
-`node_modules`). The host E2E used the host's default workspace on both versions, without the directory picker.
+`node_modules`). The host E2E used the host's default workspace on every version, without the directory picker.
 
 ## Plugin versioning
 
 The plugin uses semver independently of DSH (`0.1.0`, `0.1.1`, …). During the
 `0.x` series, use a patch for compatible fixes or DSH support expansion that
 keeps the old window, and a minor for a new provider, a breaking setting, or
-dropped DSH support. A peer-window change still requires a new plugin
-version and tag; it does not create one plugin release line per DSH minor. The
-current source version `0.1.0` targets both DSH `0.1.7-rc.2` and
-`0.2.0-rc.1`, so its minor version cannot identify one DSH minor. The exact
-peers and CI matrix state host compatibility; plugin patches can ship between
-DSH releases.
+dropped DSH support. A peer-range move still requires a new plugin version
+and tag; it does not create one plugin release line per DSH minor. The
+current source version `0.1.0` supports a three-version window
+(`0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2`), so its minor version cannot
+identify one DSH minor. The peer range and CI matrix state host
+compatibility; plugin patches can ship between DSH releases.
 
 Every release tag matches `package.json` (`v0.1.0` for version `0.1.0`). Once
 that tag is published, users can pin with it:
@@ -118,11 +140,13 @@ not pre-created.
 
 1. **Prepare a PR.** Set the intended plugin version in `package.json` and
    draft release notes. Update the README and compatibility table for changed
-   behavior. When adding a DSH RC, update `dsh-versions.txt` and the exact
-   peer disjunction together in this PR. Drop the oldest RC if the window
-   exceeds three minor lines, and move the pinned dev dependencies and
-   lockfile to the new floor when the old floor leaves. There is no
-   release-watch job; check DSH releases manually until one is added.
+   behavior. When adding a DSH RC, update `dsh-versions.txt` in this PR; move
+   the peer range's bounds in the same PR when the floor leaves or when a new
+   minor line passes the gate, and move the pinned dev dependencies and
+   lockfile to the new floor when the old floor leaves. A minor line keeps at
+   most its two newest gated RCs; a fourth minor line drops the oldest line.
+   There is no release-watch job; check DSH releases manually until one is
+   added.
 2. **Run the gate.** Require the PR's `CI gate`: per-version build, tests,
    host-export and host contract checks, plus the boot smoke and host E2E
    of one packed tarball on every listed DSH version. A host E2E
@@ -131,7 +155,7 @@ not pre-created.
    or narrow the window and peers in the PR. Record a new ✅ in the
    compatibility table only after its gate passes. Before adding a DSH RC,
    the nightly `next-host` job has usually run these checks against it
-   already, with its peers widened in a nightly-only tarball; an open
+   already, on a nightly-only tarball whose peers admit it; an open
    `Nightly: DSH <version> breaks …` issue names the checks that failed.
 3. **Check live behavior.** Run the [manual canary](testing.md#pre-release-canary-manual--not-a-test-layer)
    from the PR commit in isolated profiles on each supported DSH version.
