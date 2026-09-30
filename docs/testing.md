@@ -449,3 +449,44 @@ regression that made an outbound request anyway would not fail it (see
 The manual pre-release canary is the only thing that ever touches a real
 account, and it is done by the maintainer, in an isolated profile. If a test
 needs a secret, the test is wrong.
+
+## Coverage limits
+
+What the checks above do **not** prove, stated with the mechanism that keeps
+each limit honest.
+
+- **The host E2E depends on the host opening its default workspace.**
+  `scripts/host-e2e.sh` points the host's first-use workspace at the temp
+  home through a `--patch` overlay, and `scripts/host-e2e.mjs` then waits
+  for the composer to become editable. When it does not, the driver silently
+  falls back to driving the host's directory-picker UI and creating a
+  workspace by hand — the run passes, just with a different log line. A host
+  change that stops opening the default workspace therefore does not fail
+  the E2E; it changes which path the suite exercised.
+- **The host contract check covers the entries `src/client/host-contract.ts`
+  enumerates, not every host surface the client touches.**
+  `scripts/check-host-contract.mjs` checks the manifest's listed names, and
+  `test/host-contract.spec.ts` only requires the forms its scanners read
+  (slot injections, context services, `var(--dsw-…)` tokens, `[data-…]`
+  attribute selectors, `hostIcon()` names, value imports). A host name
+  reached another way — for example the settings-panel selector
+  `div[role="dialog"][aria-modal="true"]:has(> nav)` in
+  `src/client/index.ts` — is invisible to both, and a host change there
+  fails no check.
+- **The host E2E never opens the host's Settings page.** The driver's
+  browser pass covers the model picker, one streamed Codex reply, the usage
+  pill, and the usage dialog. The plugin's settings section
+  (`ctx.slots.inject('settings.section', …)` in `src/client/index.ts`) is
+  registered and its slot name is contract-checked, but no assertion renders
+  the section against a real host.
+- **The unit suite runs in Node, not in a browser DOM.** `pnpm test` is
+  `node --test` over the compiled specs; no jsdom or happy-dom stands in for
+  the host page. The browser fixtures under `test/` (for example
+  `test/account-manager-browser.mjs`) are opt-in manual scripts driven
+  through Playwright, not part of `pnpm test`, so a client change that only
+  misbehaves against a real DOM is caught by the host E2E or not at all.
+- **The nightly job is an early warning, not a gate.** The mutation,
+  shuffled-repeat, and next-host steps run with `continue-on-error`, and
+  the mutation thresholds only color the report — the job does not fail on
+  a low score. A red nightly step signals investigation; it does not block
+  a release the way the CI gate does.
