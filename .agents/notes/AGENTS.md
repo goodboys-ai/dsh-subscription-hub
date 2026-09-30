@@ -21,6 +21,10 @@ The path encodes status and kind:
 - `rejected/` — considered and declined.
   `Status: rejected — <why, in one line>`. Keep only while its rationale
   prevents a tempting, meaningful mistake; otherwise delete it.
+- `archived/` — shipped, then replaced by a newer decision.
+  `Status: archived — <successor note link>`. The body stays frozen as the
+  historical record — facts are no longer updated in place — and the
+  successor note links back to it.
 
 **Class** — the kind of decision. Closed set; adding a class requires
 updating this file:
@@ -71,7 +75,8 @@ Move durable decision history out of standing docs and link to its note.
 ## Lint
 
 `node scripts/verify-agent-notes.mjs` (also a CI job) enforces the shape:
-`{proposed,implemented,rejected}/` lifecycle folders, the closed class set,
+`{proposed,implemented,rejected,archived}/` lifecycle folders, the closed
+class set,
 `YYYY-MM-DD-topic.md` filenames, no index files, no legacy `docs/rfc`
 homes, and the required sections — `## Problem` first,
 `## Alternatives considered` always, plus `## Decision`/`## Consequences`

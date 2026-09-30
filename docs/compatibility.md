@@ -45,7 +45,7 @@ no per-version artifact.
 
 The rationale lives in agent notes:
 [bounded peer range](../.agents/notes/implemented/process/2026-09-30-bounded-peer-range.md)
-(superseding [exact-version peer disjunction](../.agents/notes/implemented/process/2026-09-29-exact-peer-disjunction.md))
+(superseding [exact-version peer disjunction](../.agents/notes/archived/process/2026-09-29-exact-peer-disjunction.md))
 and [single-tarball CI](../.agents/notes/implemented/testing/2026-09-29-single-tarball-ci.md).
 
 ## What "supported" means

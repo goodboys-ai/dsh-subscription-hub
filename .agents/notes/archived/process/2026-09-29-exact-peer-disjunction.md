@@ -1,12 +1,6 @@
 # Agent Note: Exact-version peer disjunction
 
-Status: implemented
-
-> Superseded by [2026-09-30 Bounded peer range](2026-09-30-bounded-peer-range.md):
-> the six peers moved from an exact-version disjunction to a bounded range
-> (`>=0.1.7-rc.2 <0.3.0-0`). This note survives as the record of the original
-> decision; its core argument — a peer declaration is an install-time-enforced
-> promise — still stands and is why the range keeps both bounds.
+Status: archived — superseded by [2026-09-30 Bounded peer range](../../implemented/process/2026-09-30-bounded-peer-range.md)
 
 ## Problem
 

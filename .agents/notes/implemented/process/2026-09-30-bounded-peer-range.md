@@ -4,7 +4,7 @@ Status: implemented
 
 ## Problem
 
-The [2026-09-29 exact-version disjunction](2026-09-29-exact-peer-disjunction.md)
+The [2026-09-29 exact-version disjunction](../archived/process/2026-09-29-exact-peer-disjunction.md)
 pins the six `@deepseek-ai/dsh-*` peers to an exact-version disjunction that
 the DSH plugin manager enforces at install time. Every host RC the plugin
 has not explicitly listed rejects installation for users on that version —
@@ -104,7 +104,7 @@ explicitly, and (follow-up) the plugin emits a drift warning on out-of-window
 hosts at startup.
 
 This note supersedes the exact-disjunction decision in
-[2026-09-29-exact-peer-disjunction.md](2026-09-29-exact-peer-disjunction.md);
+[2026-09-29-exact-peer-disjunction.md](../archived/process/2026-09-29-exact-peer-disjunction.md);
 that note's core argument — a peer declaration is an install-time-enforced
 promise — still stands and is why this note keeps both bounds. The window
 rule (including the transition clause) is implemented in

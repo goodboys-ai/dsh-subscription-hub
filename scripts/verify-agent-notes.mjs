@@ -9,13 +9,14 @@
  * stated in .agents/notes/AGENTS.md.
  *
  * Checks:
- *  - every note lives at {proposed,implemented,rejected}/{class}/YYYY-MM-DD-topic.md
+ *  - every note lives at {proposed,implemented,rejected,archived}/{class}/YYYY-MM-DD-topic.md
  *    with class in the closed set {provider, architecture, process, testing};
  *  - no centralized index file (the tree is the index);
  *  - no legacy decision-record homes (docs/rfc, docs/rfcs, docs/adr);
  *  - line 1 is `# Agent Note: <title>`;
  *  - the `Status:` line matches the note's lifecycle folder
- *    (rejected carries ` — <why, in one line>`);
+ *    (rejected carries ` — <why, in one line>`, archived carries
+ *    ` — <successor note link>`);
  *  - the first `##` section is `## Problem`;
  *  - `## Alternatives considered` is present (mandatory);
  *  - implemented notes also carry `## Decision` and `## Consequences`;
@@ -33,7 +34,7 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const notesRoot = join(repoRoot, '.agents', 'notes')
 
-const LIFECYCLES = ['proposed', 'implemented', 'rejected']
+const LIFECYCLES = ['proposed', 'implemented', 'rejected', 'archived']
 const CLASSES = ['provider', 'architecture', 'process', 'testing']
 const DATE_FILE = /^\d{4}-\d{2}-\d{2}-.+\.md$/
 
@@ -60,7 +61,9 @@ function checkNote(rel, lifecycle) {
   }
   const statusLines = lines.filter((l) => l.startsWith('Status:'))
   const want =
-    lifecycle === 'rejected' ? /^Status: rejected — .+/ : new RegExp(`^Status: ${lifecycle}$`)
+    lifecycle === 'rejected' || lifecycle === 'archived'
+      ? new RegExp(`^Status: ${lifecycle} — .+`)
+      : new RegExp(`^Status: ${lifecycle}$`)
   if (statusLines.length !== 1 || !want.test(statusLines[0])) {
     fail(
       `${rel}: must carry exactly one \`Status:\` line matching its folder ` +
@@ -73,7 +76,7 @@ function checkNote(rel, lifecycle) {
     fail(`${rel}: the first section must be \`## Problem\` (got ${JSON.stringify(h2s[0] ?? '<none>')})`)
   }
   const required =
-    lifecycle === 'implemented'
+    lifecycle === 'implemented' || lifecycle === 'archived'
       ? ['## Decision', '## Consequences']
       : lifecycle === 'proposed'
         ? ['## Proposal', '## Acceptance criteria', '## Risks']
