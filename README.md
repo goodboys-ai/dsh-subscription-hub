@@ -106,6 +106,20 @@ usage.
 The plugin follows DSH network settings. Its former proxy configuration and
 UI have been retired; an old plugin proxy config file is ignored.
 
+## Usage coloring
+
+**Settings → Subscriptions → Usage coloring** offers one browser-local dropdown:
+
+- **Standard** (default): yellow when used quota leads elapsed time by at least 10 percentage points.
+- **Relaxed**: yellow at a lead of at least 15 points.
+- **Remaining quota only**: no yellow pace warnings.
+
+Every preset shows fresh usage of 90% or more in red, before considering pace. For example, 40% used after 25% of a window is a 15-point lead, not a consumption forecast. Preferences apply to all meters, survive reloads and synchronize across tabs of the same origin. They change display only, never account routing or quota enforcement.
+
+A vertical marker shows elapsed time only for an explicit valid start/end interval or a provider-verified fixed duration. A session/weekly label alone does not establish a fixed window; rolling or unknown intervals have no marker. Below 90%, unknown timing is neutral in pace presets and green in remaining-only mode.
+
+Invalid, expired, failed-refresh or more-than-five-minute-old readings are neutral. Cached numbers remain visible, with an accessible stale label; refresh to confirm them. Tooltips explain remaining quota, time progress and reset countdown where available. See the [decision record](.agents/notes/implemented/architecture/2026-10-01-usage-pace-colors.md) for rationale and verification limits.
+
 ## Development
 
 ```sh

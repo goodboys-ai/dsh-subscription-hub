@@ -19,6 +19,8 @@ import { en } from './locales.js'
 import { ProviderAccountManager } from './ProviderAccountManager.js'
 import { ExternalUsageCards } from './ExternalUsageCards.js'
 import { CursorCard } from './CursorCard.js'
+import { UsageMeter } from './UsageMeter.js'
+import { displayUsedPercent } from './usage-pace.js'
 import { UsageBadgeDisplaySetting } from './UsageBadgeDisplaySetting.js'
 import { USAGE_BADGE_REFRESH_EVENT } from './usage-badge-preferences.js'
 import { subscriptionCardStyles as cardStyles } from './subscription-card-styles.js'
@@ -78,10 +80,15 @@ export interface UsageWindow {
   scope?: string
   usedPercent: number
   resetsAt?: number
+  startsAt?: number
+  windowDurationMs?: number
+  fixedWindow?: boolean
 }
 
 /** `usage` endpoint value: the node half owns this shape. */
 export interface ProviderUsage {
+  observedAt?: number
+  stale?: boolean
   supported: boolean
   windows?: UsageWindow[]
   plan?: string
@@ -192,8 +199,6 @@ const styles: Record<string, CSSProperties> = {
     font: 'inherit', fontSize: 14, lineHeight: '20px', cursor: 'pointer',
     color: 'var(--dsw-alias-state-warn-label)',
   },
-  usageTrack: cardStyles.usageTrack,
-  usageFill: cardStyles.usageFill,
   deviceCode: {
     marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6,
     border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8,
@@ -276,12 +281,8 @@ function usageWindowLabel(t: SubscriptionsSectionInjected['t'], window: UsageWin
   return window.scope !== undefined && window.scope !== '' ? `${base} · ${window.scope}` : base
 }
 
-/** Bar fill color: success normally, warn from 80%, error from 95%. Shared with the composer badge. */
-export function usageBarColor(usedPercent: number): string {
-  if (usedPercent >= 95) return 'var(--dsw-alias-state-error-primary)'
-  if (usedPercent >= 80) return 'var(--dsw-alias-state-warn-label)'
-  return 'var(--dsw-alias-state-success-primary)'
-}
+/** Meter fill color lives with the pace logic: fresh 90%+ is red, pace presets add a yellow lead threshold. */
+export { usageBarColor } from './usage-pace.js'
 
 /** What one provider's collapsible default-effort section renders. */
 export interface ModelDefaultsView {
@@ -393,6 +394,7 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
   const [copiedCode, setCopiedCode] = useState<SubscriptionProvider | undefined>(undefined)
   /** Usage snapshots keyed `${provider}:${accountKey}` — every account tracks its own windows. */
   const [usages, setUsages] = useState<Record<string, ProviderUsage>>({})
+  const [observedAt, setObservedAt] = useState<Record<string, number>>({})
   const [usageErrors, setUsageErrors] = useState<Record<string, string>>({})
   const [usageLoading, setUsageLoading] = useState<Record<string, boolean>>({})
   const mountedRef = useRef(true)
@@ -492,6 +494,7 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
       const usage = await callSubscriptionsAuth<ProviderUsage>(rpc, 'usage', { provider, account, ...force ? { force: true } : {} })
       if (!mountedRef.current) return
       setUsages(prev => ({ ...prev, [key]: usage }))
+      setObservedAt(prev => ({ ...prev, [key]: usage.observedAt ?? Date.now() }))
       window.dispatchEvent(new Event(USAGE_BADGE_REFRESH_EVENT))
       setUsageErrors((prev) => {
         const next = { ...prev }
@@ -710,20 +713,18 @@ export function SubscriptionsSection(props: SubscriptionsSectionProps) {
                         <p style={styles.statusLine}>{t('usageEmpty')}</p>
                       )}
                       {(usage?.windows ?? []).map((window, index) => {
-                        const percent = Math.min(100, Math.max(0, window.usedPercent))
+                        const percent = displayUsedPercent(window.usedPercent)
                         return (
                           <div key={index} style={styles.usageRow}>
                             <div style={styles.usageMeta}>
                               <span>{usageWindowLabel(t, window)}</span>
                               <span>
-                                {`${String(Math.round(percent))}%`}
+                                {percent === undefined ? t('usageMeterInvalid') : `${percent}%`}
                                 {window.resetsAt !== undefined
                                   && ` · ${t('usageResets', { date: new Date(window.resetsAt).toLocaleString() })}`}
                               </span>
                             </div>
-                            <div style={styles.usageTrack}>
-                              <div style={{ ...styles.usageFill, width: `${String(percent)}%`, background: usageBarColor(percent) }} />
-                            </div>
+                            <UsageMeter window={window} t={t} observedAt={observedAt[usageKey]} stale={usageError !== undefined || usage.stale === true} />
                           </div>
                         )
                       })}

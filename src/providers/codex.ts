@@ -335,6 +335,8 @@ function codexUsageWindow(value: unknown, fallbackKind: UsageWindow['kind']): Us
   }
   return {
     kind: codexWindowKind(window, fallbackKind),
+    ...typeof window.limit_window_seconds === 'number' && Number.isFinite(window.limit_window_seconds)
+      && window.limit_window_seconds > 0 ? { windowDurationMs: window.limit_window_seconds * 1000 } : {},
     usedPercent: window.used_percent,
     ...resetsAt === undefined ? {} : { resetsAt },
   }

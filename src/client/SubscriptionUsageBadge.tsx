@@ -29,7 +29,9 @@ import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import { useAnchoredPosition, useDismissOnOutsidePointer } from '@deepseek-ai/dsh-client-ui-primitives'
-import { callSubscriptionsAuth, usageBarColor } from './SubscriptionsSection.js'
+import { callSubscriptionsAuth } from './SubscriptionsSection.js'
+import { UsageMeter } from './UsageMeter.js'
+import { displayUsedPercent } from './usage-pace.js'
 import type { AccountStatus, ProviderStatus, ProviderUsage, SubscriptionProvider, UsageWindow } from './SubscriptionsSection.js'
 import type { ModelDirectoriesLike } from './SpeedSelect.js'
 import { en } from './locales.js'
@@ -81,6 +83,8 @@ export interface AccountUsageDisplay {
   /** The account direct routes serve; the collapsed pill reads this one. */
   isDefault: boolean
   windows: UsageWindow[]
+  observedAt?: number | undefined
+  stale?: boolean | undefined
 }
 
 /** One provider's usage snapshot: every logged-in account that reports windows. */
@@ -222,7 +226,7 @@ export function createCurrentModelReader(
  * Falls back to the scope/kind abbreviation when no reset time is known.
  */
 export function windowLabel(w: UsageWindow): string {
-  if (w.resetsAt === undefined) {
+  if (w.resetsAt === undefined || !Number.isFinite(w.resetsAt)) {
     if (w.scope !== undefined && w.scope !== '') return w.scope
     switch (w.kind) {
       case 'session': return '5h'
@@ -239,9 +243,13 @@ export function windowLabel(w: UsageWindow): string {
   return `${Math.max(1, minutes)}m`
 }
 
-/** Clamp and round a window's used share for display. */
-function usedPercent(w: UsageWindow): number {
-  return Math.round(Math.min(100, Math.max(0, w.usedPercent)))
+/**
+ * One compact segment piece (`6d1h 25%`); an unusable provider percentage
+ * renders as the no-data dash, consistent with the meter's unavailable state.
+ */
+function windowSegment(label: string, w: UsageWindow): string {
+  const percent = displayUsedPercent(w.usedPercent)
+  return percent === undefined ? `${label} —` : `${label} ${percent}%`
 }
 
 /** Keep model quotas separate: matching percentages do not imply a shared pool. */
@@ -273,10 +281,10 @@ export function compactSegment(d: ProviderUsageDisplay, model?: string, t: Trans
         count: new Set(windows.map(w => w.scope).filter(Boolean)).size,
       })}`
     }
-    const parts = matching.slice(0, 2).map(w => `${w.kind === 'weekly' ? t('usageWeekly') : t('usageWindow')} ${usedPercent(w)}%`)
+    const parts = matching.slice(0, 2).map(w => windowSegment(w.kind === 'weekly' ? t('usageWeekly') : t('usageWindow'), w))
     return `${d.name} ${parts.join(' · ')}`
   }
-  const parts = windows.slice(0, 2).map(w => `${windowLabel(w)} ${usedPercent(w)}%`)
+  const parts = windows.slice(0, 2).map(w => windowSegment(windowLabel(w), w))
   if (windows.length > 2) parts.push(`+${windows.length - 2}`)
   return `${d.name} ${parts.join(' · ')}`
 }
@@ -368,8 +376,10 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
   // across a failed poll (e.g. a 429 during the server's own negative-cache
   // cooldown) so a row doesn't flicker away — it only disappears once the
   // account actually logs out or a fetch succeeds but reports the window as
-  // unsupported.
+  // unsupported. Observation metadata (freshness) shares this lifecycle: an
+  // entry is dropped wherever its windows are dropped.
   const lastKnownRef = useRef(new Map<string, UsageWindow[]>())
+  const observationsRef = useRef(new Map<string, { observedAt?: number | undefined; stale: boolean }>())
 
   const refresh = useCallback(async (): Promise<void> => {
     if (rpc === undefined || inflightRef.current) return
@@ -383,7 +393,10 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
       // real signal, unlike a fetch failure.
       const live = new Set(roster.map(({ provider, account }) => usageKeyOf(provider, account)))
       for (const key of lastKnown.keys()) {
-        if (refreshed.has(key.split(':', 1)[0] as BadgeProvider) && !live.has(key)) lastKnown.delete(key)
+        if (refreshed.has(key.split(':', 1)[0] as BadgeProvider) && !live.has(key)) {
+          lastKnown.delete(key)
+          observationsRef.current.delete(key)
+        }
       }
 
       const results = await Promise.allSettled(
@@ -394,6 +407,10 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
       )
       if (!mountedRef.current) return
 
+      for (const { provider, account } of roster) {
+        const key = usageKeyOf(provider, account)
+        observationsRef.current.set(key, { ...observationsRef.current.get(key), stale: true })
+      }
       const plans = new Map<string, string>()
       for (const r of results) {
         if (r.status !== 'fulfilled') continue // keep whatever is cached for this account
@@ -402,17 +419,28 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
         if (usage.plan !== undefined) plans.set(key, usage.plan)
         if (!usage.supported || !usage.windows || usage.windows.length === 0) {
           lastKnown.delete(key)
+          observationsRef.current.delete(key)
           continue
         }
         lastKnown.set(key, usage.windows)
+        observationsRef.current.set(key, { observedAt: usage.observedAt ?? Date.now(), stale: usage.stale === true })
       }
 
       setDisplays(previous => [
-        ...groupUsageDisplays(roster, lastKnown, plans),
-        ...previous.filter(display => !refreshed.has(display.provider)),
+        ...groupUsageDisplays(roster, lastKnown, plans).map(display => ({ ...display,
+          accounts: display.accounts.map(account => ({ ...account,
+            ...observationsRef.current.get(`${display.provider}:${account.key}`),
+          })),
+        })),
+        ...previous.filter(display => !refreshed.has(display.provider)).map(display => ({ ...display,
+          accounts: display.accounts.map(account => ({ ...account, stale: true })),
+        })),
       ])
     } catch {
-      // A failed poll must not crash the badge; keep last known state.
+      // Keep cached numbers, but never present failed observations as current.
+      if (mountedRef.current) setDisplays(previous => previous.map(display => ({ ...display,
+        accounts: display.accounts.map(account => ({ ...account, stale: true })),
+      })))
     } finally {
       inflightRef.current = false
     }
@@ -560,6 +588,7 @@ export function SubscriptionUsageBadge({ rpc, currentModel, t }: SubscriptionUsa
                   <AccountWindows
                     key={`${d.provider}:${badgeSelection?.model ?? ''}`}
                     windows={account.windows}
+                    observedAt={account.observedAt} stale={account.stale}
                     model={d.provider === badgeSelection?.provider ? badgeSelection.model : undefined}
                     provider={d.provider}
                     translate={translate}
@@ -613,14 +642,15 @@ function AccountMeta({ account, translate }: { account: AccountUsageDisplay; tra
 }
 
 /** Preview each account independently; all remaining quotas stay accessible. */
-export function AccountWindows({ windows, model, provider, translate }: {
+export function AccountWindows({ windows, model, provider, translate, observedAt, stale }: {
   windows: readonly UsageWindow[]; model: string | undefined; provider?: BadgeProvider; translate: Translate
+  observedAt?: number | undefined; stale?: boolean | undefined
 }) {
   const { shown, hidden } = previewWindows(windows, model, provider)
   const rows = (items: readonly UsageWindow[]) => (
     <dl style={styles.details}>
       {items.map((w, i) => (
-        <WindowRow key={i} label={`${usageWindowLabel(translate, w)}${model !== undefined && w.scope === model ? ` · ${translate('usageBadgeCurrent')}` : ''}`} window={w} />
+        <WindowRow key={i} label={`${usageWindowLabel(translate, w)}${model !== undefined && w.scope === model ? ` · ${translate('usageBadgeCurrent')}` : ''}`} window={w} t={translate} observedAt={observedAt} stale={stale} />
       ))}
     </dl>
   )
@@ -634,18 +664,16 @@ export function AccountWindows({ windows, model, provider, translate }: {
 }
 
 /** One `dt`/`dd` pair: window name → `25% · 6d1h`, with the bar underneath. */
-function WindowRow({ label, window: w }: { label: string; window: UsageWindow }) {
-  const percent = usedPercent(w)
+function WindowRow({ label, window: w, t, observedAt, stale }: { label: string; window: UsageWindow; t: Translate; observedAt?: number | undefined; stale?: boolean | undefined }) {
+  const percent = displayUsedPercent(w.usedPercent)
   return (
     <>
       <dt style={styles.dt}>{label}</dt>
       <dd style={styles.dd}>
-        {percent}%
-        {w.resetsAt !== undefined && <span style={styles.reset}> · {windowLabel(w)}</span>}
+        {percent === undefined ? t('usageMeterInvalid') : `${percent}%`}
+        {w.resetsAt !== undefined && Number.isFinite(w.resetsAt) && <span style={styles.reset}> · {windowLabel(w)}</span>}
       </dd>
-      <div style={styles.bar} aria-hidden>
-        <div style={{ ...styles.barFill, width: `${percent}%`, background: usageBarColor(percent) }} />
-      </div>
+      <UsageMeter window={w} t={t} style={styles.bar} observedAt={observedAt} stale={stale} />
     </>
   )
 }
@@ -727,5 +755,4 @@ const styles: Record<string, CSSProperties> = {
     gridColumn: '1 / -1', height: 4, borderRadius: 2, overflow: 'hidden',
     background: 'var(--dsw-alias-border-l2)', marginBottom: 2,
   },
-  barFill: { height: '100%', borderRadius: 2 },
 }

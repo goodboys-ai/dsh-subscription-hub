@@ -371,7 +371,9 @@ export async function fetchGrokUsage(
     const usedPercent = typeof config.creditUsagePercent === 'number' && Number.isFinite(config.creditUsagePercent)
       ? config.creditUsagePercent
       : 0
-    windows.push({ kind, usedPercent, ...resetsAt === undefined ? {} : { resetsAt } })
+    const startsAt = grokResetsAt(config.currentPeriod?.start)
+    windows.push({ kind, usedPercent, ...resetsAt === undefined ? {} : { resetsAt },
+      ...startsAt === undefined ? {} : { startsAt } })
   } else if (typeof config.monthlyLimit?.val === 'number' && config.monthlyLimit.val > 0) {
     const used = typeof config.used?.val === 'number' ? config.used.val : 0
     const resetsAt = grokResetsAt(config.billingPeriodEnd)

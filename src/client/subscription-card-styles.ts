@@ -47,9 +47,4 @@ export const subscriptionCardStyles: Record<string, CSSProperties> = {
     display: 'flex', justifyContent: 'space-between', gap: 8,
     fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-tertiary)',
   },
-  usageTrack: {
-    height: 6, borderRadius: 3, overflow: 'hidden',
-    background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l2)',
-  },
-  usageFill: { height: '100%', borderRadius: 3 },
 }

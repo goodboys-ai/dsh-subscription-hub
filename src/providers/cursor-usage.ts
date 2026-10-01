@@ -91,6 +91,10 @@ export async function fetchCursorUsage(
   const resetValue = summary?.billingCycleEnd
   const parsedReset = typeof resetValue === 'string' ? Date.parse(resetValue) : NaN
   const resetsAt = Number.isFinite(parsedReset) ? parsedReset : undefined
+  const startValue = summary?.billingCycleStart
+  const parsedStart = typeof startValue === 'string' ? Date.parse(startValue) : NaN
+  const timing = { ...(resetsAt === undefined ? {} : { resetsAt }),
+    ...(Number.isFinite(parsedStart) ? { startsAt: parsedStart } : {}) }
   const windows: UsageWindow[] = []
   for (const [field, scope] of [
     ['totalPercentUsed', 'Included'],
@@ -99,10 +103,10 @@ export async function fetchCursorUsage(
   ] as const) {
     const usedPercent = number(plan?.[field])
     if (usedPercent === undefined || usedPercent < 0 || usedPercent > 100) continue
-    windows.push({ kind: 'other', scope, usedPercent, ...(resetsAt === undefined ? {} : { resetsAt }) })
+    windows.push({ kind: 'other', scope, usedPercent, ...timing })
   }
   const legacy = legacyRequestWindow(legacyResult.status === 'fulfilled' ? legacyResult.value : undefined, resetsAt)
-  if (legacy !== undefined) windows.push(legacy)
+  if (legacy !== undefined) windows.push({ ...legacy, ...timing })
   if (windows.length === 0 && summary?.isUnlimited !== true) {
     throw new Error('Cursor usage response has no quota windows')
   }

@@ -373,6 +373,11 @@ async function withChrome(cookies, evidence, body) {
   }
 }
 
+async function captureNamedScreenshot(cdp, name) {
+  const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
+  writeFileSync(join(artifactDir, `${name}.png`), Buffer.from(shot.data, 'base64'))
+}
+
 async function saveEvidence(cdp, page, dir) {
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'console.json'), `${JSON.stringify(page, null, 2)}\n`)
@@ -456,6 +461,7 @@ async function drive(cdp, page, evidence) {
     throw new ProductFailure(`usage dialog does not match the fixture:\n  ${wrong.join('\n  ')}\n  sections: ${JSON.stringify(sections).slice(0, 2000)}`)
   }
   console.log('ok: usage dialog lists every source with its fixture percentage')
+  await captureNamedScreenshot(cdp, 'usage-dialog')
 
   // Product: the dialog wears the host's menu material in both themes, and
   // the collapsed pill is still transparent.
@@ -541,6 +547,16 @@ async function checkSettingsSection(cdp) {
     throw new ProductFailure(`the ${t.nav} section is missing rendered copy:\n  ${missing.join('\n  ')}`)
   }
   console.log(`ok: settings section ${t.nav} renders intro, provider cards, and the display control`)
+  await captureNamedScreenshot(cdp, 'settings')
+  if (process.env.HOST_E2E_COLOR_CHECK === '1') {
+    const colorSelect = `document.querySelector(${JSON.stringify(`${outlet} select[aria-label="${t.usageColorLabel}"]`)})`
+    if (!await waitFor(cdp, `(() => ${colorSelect} !== null)()`, 10_000)) throw new ProductFailure('usage coloring control missing')
+    const values = await cdp.evaluate(`(() => [...${colorSelect}.options].map(o => o.value))()`)
+    if (JSON.stringify(values) !== JSON.stringify(['standard', 'relaxed', 'remaining'])) throw new ProductFailure('usage coloring presets mismatch')
+    await setSelectValue(cdp, colorSelect, 'remaining')
+    if (await cdp.evaluate(`localStorage.getItem('dsh.subscriptions.usageColorPreset')`) !== 'remaining') throw new ProductFailure('usage coloring did not persist')
+    console.log('ok: coloring exposes exactly three presets and persists Remaining quota only')
+  }
 
   // Product: the display control is a select bound to the preference the
   // unit spec covers; flipping it persists to localStorage.
@@ -578,6 +594,12 @@ async function checkSettingsSection(cdp) {
     throw new ProductFailure(`after reload the display control reads ${JSON.stringify(value)}, expected "hidden"`)
   }
   console.log('ok: the display control still reads Hidden after a reload')
+  if (process.env.HOST_E2E_COLOR_CHECK === '1') {
+    const colorSelect = `document.querySelector(${JSON.stringify(`${outlet} select[aria-label="${t.usageColorLabel}"]`)})`
+    if (!await waitFor(cdp, `(() => ${colorSelect}?.value === 'remaining')()`, 10_000)) throw new ProductFailure('usage coloring preference lost after reload')
+    await setSelectValue(cdp, colorSelect, 'standard')
+    console.log('ok: coloring survives reload and restores Standard')
+  }
 
   // Leave the preference at its default so the rest of the run (and the
   // saved evidence) shows the shipped behavior.

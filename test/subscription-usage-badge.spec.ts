@@ -56,6 +56,23 @@ test('compact summary uses default account and preserves bounded non-Antigravity
   assert.ok(compactSegment(display('codex')).endsWith('+58'))
 })
 
+test('an unusable percentage shows the no-data state instead of a clamped number', () => {
+  for (const usedPercent of [NaN, -1, 101, Infinity]) {
+    assert.equal(compactSegment(display('codex', [{ kind: 'session', usedPercent }])), 'Codex 5h —')
+    assert.equal(compactSegment(display('antigravity', [{ kind: 'other', scope: 'gemini-model-1', usedPercent }]), 'gemini-model-1'), 'Antigravity Window —')
+  }
+  // The dialog row matches the meter's unavailable state rather than clamping to 100%.
+  for (const dictionary of [en, zh]) {
+    const translate = (key: keyof typeof en, params?: Record<string, unknown>) =>
+      dictionary[key].replace(/\{(\w+)\}/g, (_, name: string) => String(params?.[name] ?? ''))
+    const html = renderToStaticMarkup(createElement(AccountWindows, {
+      windows: [{ kind: 'session', usedPercent: 150 }], model: undefined, translate,
+    }))
+    assert.ok(html.includes(translate('usageMeterInvalid')), html)
+    assert.ok(!html.includes('150%'), html)
+  }
+})
+
 test('preview promotes current-model windows without losing, merging, or mutating data', () => {
   const original = structuredClone(windows)
   const { shown, hidden } = previewWindows(windows, 'gemini-model-59')

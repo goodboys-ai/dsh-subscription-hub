@@ -2,12 +2,14 @@ import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { SubscriptionsKey } from './locales.js'
 import { setUsageBadgeMode, useUsageBadgeMode } from './usage-badge-preferences.js'
+import { isUsageColorPreset, setUsageColorPreset, useUsageColorPreset } from './usage-color-preferences.js'
 
 type Translate = (key: SubscriptionsKey, params?: Record<string, unknown>) => string
 
 /** Browser-local display preference; never changes provider or account settings. */
 export function UsageBadgeDisplaySetting({ t }: { t: Translate }) {
   const mode = useUsageBadgeMode()
+  const preset = useUsageColorPreset()
   const [failed, setFailed] = useState(false)
   return (
     <div style={styles.card}>
@@ -34,6 +36,26 @@ export function UsageBadgeDisplaySetting({ t }: { t: Translate }) {
         </select>
       </label>
       <p style={styles.hint}>{t('usageBadgeDisplayHint')}</p>
+      <label style={styles.field}>
+        <span>{t('usageColorLabel')}</span>
+        <select style={styles.select} aria-label={t('usageColorLabel')} value={preset}
+          onChange={event => {
+            const value = event.currentTarget.value
+            if (!isUsageColorPreset(value)) return
+            try { setUsageColorPreset(value); setFailed(false) }
+            catch (error) {
+              if (!(error instanceof DOMException) || !['SecurityError', 'QuotaExceededError'].includes(error.name)) throw error
+              setFailed(true)
+            }
+          }}>
+          <option value="standard">{t('usageColorStandard')}</option>
+          <option value="relaxed">{t('usageColorRelaxed')}</option>
+          <option value="remaining">{t('usageColorRemaining')}</option>
+        </select>
+      </label>
+      <p style={styles.hint}>{t(preset === 'remaining' ? 'usageColorRemainingHint' : 'usageColorPaceHint', {
+        allowance: preset === 'relaxed' ? 15 : 10,
+      })}</p>
       {failed && <p role="alert" style={{ ...styles.hint, color: 'var(--dsw-alias-state-error-primary)' }}>{t('usageBadgeDisplaySaveFailed')}</p>}
     </div>
   )
