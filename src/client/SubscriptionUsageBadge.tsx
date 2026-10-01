@@ -17,8 +17,9 @@
  * The collapsed pill reads only the default account — the same account
  * direct (non-pool) routes serve — so it stays one short segment even for a
  * provider with several accounts connected; the dialog shows them all.
- * Every color resolves through a `--dsw-*` design token and every
- * user-visible string goes through the locale `t` of the
+ * Every color resolves through a `--dsw-*` design token, the dialog wears the
+ * host's menu material (its translucent fill plus its backdrop blur), and
+ * every user-visible string goes through the locale `t` of the
  * 'settings.subscriptions' namespace.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -673,10 +674,14 @@ const styles: Record<string, CSSProperties> = {
     color: 'var(--dsw-alias-label-secondary)',
   },
   label: { textOverflow: 'ellipsis', minWidth: 0, overflow: 'hidden' },
-  // Mirrors the host stat-dialog panel.
+  // Mirrors the host stat-dialog panel. The menu fill is translucent by
+  // design and only the host's backdrop blur keeps it readable as a surface:
+  // without the blur the transcript behind the dialog stays sharp and shows
+  // through the fill.
   panel: {
     position: 'fixed', zIndex: 1100, boxSizing: 'border-box',
     background: 'var(--dsw-specific-menu)',
+    backdropFilter: 'var(--dsw-menu-backdrop-filter)',
     width: 'max-content', minWidth: 'min(300px, 100vw - 24px)', maxWidth: 'min(440px, 100vw - 24px)',
     maxHeight: 'min(560px, 100dvh - 24px)', overflowY: 'auto', overscrollBehavior: 'contain',
     boxShadow: 'var(--dsw-elevation-prominent)',

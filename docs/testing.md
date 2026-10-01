@@ -263,6 +263,12 @@ canary, not by more fakes.
 `DSH_VERSION=<v> bash scripts/host-e2e.sh` (needs Chrome or Chromium; set
 `CHROME_BIN` when it is not on `PATH` as `google-chrome` or `chromium`)
 
+Run `pnpm build` first. `dsh plugin add` installs the checkout as it stands,
+so a directory `PLUGIN_SOURCE` is installed with its current `lib/`: without a
+rebuild the run exercises the previous build, and a source change under test
+can pass on stale output. CI packs a tarball from the built tree, so only
+local runs against a checkout hit this.
+
 The plugin inside a real, signed-in `dsh web`, the way a user meets it. The
 script:
 
@@ -294,6 +300,13 @@ script:
      other section. The badge fills the dialog from RPCs that settle at
      their own pace, so the driver polls until it matches, and after a
      deadline fails on what the dialog then shows;
+   - the dialog wears the host's menu material — the `--dsw-specific-menu`
+     fill and the `--dsw-menu-backdrop-filter` blur — in the light and dark
+     themes, and the collapsed pill stays transparent. The driver switches
+     themes through the host's Appearance cubes and compares the dialog's
+     computed fill and blur against probes resolving the same tokens, saving
+     a screenshot per theme. The fill is translucent by design, so a dialog
+     that keeps it without the blur leaves the transcript behind it readable;
    - the plugin's settings section renders inside the host's settings
      panel: the panel opens from the host's settings trigger, the nav lists
      the Subscriptions entry, and the section body shows the intro copy,
@@ -406,11 +419,13 @@ check failed. Add a row when a fix lands with its test, and state in the PR
 which test failed before the fix.
 
 Issue and PR numbers refer to the upstream tracker,
-`V1ki/dsh-plugin-subscriptions`. Last replayed on 2026-09-29 against
-`pnpm test`.
+`V1ki/dsh-plugin-subscriptions`. The upstream rows were last replayed on
+2026-09-29 against `pnpm test`; the dialog-surface row was replayed on
+2026-10-01 against `bash scripts/host-e2e.sh`.
 
 | Bug | What broke | Re-introduced as | Specs that failed |
 |---|---|---|---|
+| Usage dialog surface | The dialog kept the host's translucent menu fill without its backdrop blur, so the transcript behind it stayed readable through the panel | `styles.panel` drops `backdrop-filter` | host E2E (`host-e2e.mjs`, dialog surface) |
 | [PR #116](https://github.com/V1ki/dsh-plugin-subscriptions/pull/116) | DSH 0.1.7 renamed the host icons, and the badge lost its glyphs | `hostIcon` reads only `Icon<Name>16` | `host-icons`, `subscription-usage-badge` |
 | [#80](https://github.com/V1ki/dsh-plugin-subscriptions/issues/80) | Every `/subscriptions-auth` RPC answered 405, so login was impossible | Routes registered as `/subscriptions-auth/<endpoint>` instead of `/api/subscriptions-auth.<endpoint>` | `login`, `rpc`, `model-defaults-rpc`, `provider-settings-rpc`, `usage-bar` |
 | [#22](https://github.com/V1ki/dsh-plugin-subscriptions/issues/22) | A settled background subagent put `tool_use` in a user message, and Claude answered 400 from then on | `tool-call` blocks become `tool_use` in every role | `translate` |
@@ -418,9 +433,10 @@ Issue and PR numbers refer to the upstream tracker,
 | [#27](https://github.com/V1ki/dsh-plugin-subscriptions/issues/27) | A closed rate-limit window failed the turn instead of waiting | The configured wait no longer widens the retry ceiling | `rate-limit` |
 | [#46](https://github.com/V1ki/dsh-plugin-subscriptions/issues/46) | A failed usage snapshot was not cached, so `quota_aware` hit the rate-limited endpoint on every request | No cooldown entry after a failed refresh | `pool-usage`, `pool`, `usage` |
 
-No past bug covers the host E2E yet. It was checked against injected faults
-instead: the pill rendered outside the stats row, a slot entry that throws,
-and dropped Codex text deltas. Each ended the run with a product failure.
+The dialog-surface row is the first bug the host E2E's own checks catch. The
+rest of that driver was checked against injected faults before a bug covered
+it: the pill rendered outside the stats row, a slot entry that throws, and
+dropped Codex text deltas. Each ended the run with a product failure.
 
 ## Pre-release canary (manual — not a test layer)
 

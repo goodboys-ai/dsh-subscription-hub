@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The subscription usage dialog takes the host's backdrop blur alongside its translucent menu fill, the way the host's own stat dialog does. Without the blur the conversation behind the dialog stayed sharp enough to read through the panel.
+
 ## v0.1.1 — 2026-10-01
 
 - Settings shows the CLI version Codex and Claude present, with its source (npm latest / local CLI / built-in / configured), ported from upstream `f6e1b3f` so a failed npm lookup no longer reads as a plan limit.

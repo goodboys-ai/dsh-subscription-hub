@@ -13,7 +13,9 @@
 //      the canned reply renders in the transcript.
 //   4. The usage pill renders inside the host's stats row
 //      (`data-composer-stats`), and its dialog shows each source's name
-//      with that source's own percentage.
+//      with that source's own percentage and wears the host's menu
+//      material (translucent fill plus backdrop blur) in both themes,
+//      while the collapsed pill stays transparent.
 //   5. The plugin's settings section renders inside the host's settings
 //      panel: nav entry, intro copy, provider cards for the signed-in
 //      fixture profile, the usage-display control, and the preference it
@@ -60,6 +62,20 @@ const CDP_TIMEOUT_MS = 30_000
  * poll has run; this only covers the rest of that poll landing.
  */
 const DIALOG_SETTLE_MS = 10_000
+
+/** The plugin's usage dialog, as opposed to the host's modal settings panel. */
+const USAGE_DIALOG = 'div[role="dialog"]:not([aria-modal="true"])'
+
+/**
+ * Appearance-row cube labels per theme, in the driver's two locales. Declared
+ * with the other top-level constants: the checks below run from the module's
+ * top-level try, before any declaration placed after it is initialized.
+ */
+const THEME_LABELS = {
+  light: ['Light', '浅色'],
+  dark: ['Dark', '深色'],
+  system: ['System', '跟随系统'],
+}
 
 /** A failed assertion about the plugin. Never retried. */
 class ProductFailure extends Error {}
@@ -237,7 +253,7 @@ async function checkBrowser(cookies) {
   for (let attempt = 1; ; attempt++) {
     const evidence = join(artifactDir, `browser-attempt-${attempt}`)
     try {
-      await withChrome(cookies, evidence, drive)
+      await withChrome(cookies, evidence, (cdp, page) => drive(cdp, page, evidence))
       return
     } catch (error) {
       if (!(error instanceof HarnessFailure) || attempt === 2) throw error
@@ -371,7 +387,7 @@ async function saveEvidence(cdp, page, dir) {
   }
 }
 
-async function drive(cdp, page) {
+async function drive(cdp, page, evidence) {
   // Harness: reach an editable composer.
   if (!await waitFor(cdp, hasText('Send message'), 30_000)) throw new HarnessFailure('web UI did not show a composer')
   await dismissOnboarding(cdp)
@@ -440,6 +456,10 @@ async function drive(cdp, page) {
     throw new ProductFailure(`usage dialog does not match the fixture:\n  ${wrong.join('\n  ')}\n  sections: ${JSON.stringify(sections).slice(0, 2000)}`)
   }
   console.log('ok: usage dialog lists every source with its fixture percentage')
+
+  // Product: the dialog wears the host's menu material in both themes, and
+  // the collapsed pill is still transparent.
+  await checkDialogSurface(cdp, evidence)
 
   // Product: the settings section renders inside the host's settings panel
   // and its display preference persists across a reload.
@@ -610,6 +630,178 @@ function dialogMismatches(sections) {
     if (!expectedNames.has(name)) wrong.push(`unexpected section ${JSON.stringify(name)}`)
   }
   return wrong
+}
+
+/**
+ * The usage dialog must wear the host's menu material in both themes: the
+ * translucent menu fill plus the host's backdrop blur. The fill alone keeps
+ * the transcript behind the dialog sharp enough to read through it, which is
+ * the defect this check catches.
+ *
+ * The panel's computed fill and blur are compared against probes resolving
+ * the same theme tokens, so the check follows the host theme without
+ * hard-coded colors or color-syntax parsing, and needs no screenshot
+ * interpreter. The collapsed pill is judged in the same pass: the surface fix
+ * must not paint the trigger. Each theme leaves a screenshot in the evidence
+ * directory, and the problems from both themes are reported together so a
+ * failing run still shows what the dark theme rendered.
+ */
+async function checkDialogSurface(cdp, evidence) {
+  // The dialog is open from the percentage check above. Close it here rather
+  // than leaning on the theme switch: clickLabel clicks with a synthetic
+  // event that fires no pointerdown, so outside-pointer dismissal never sees
+  // it, and the trigger's resting surface is measured with the dialog shut.
+  await pressKey(cdp, 'Escape', 27)
+  if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(USAGE_DIALOG)}) === null)()`, 5_000)) {
+    throw new HarnessFailure('the usage dialog did not close before the surface check')
+  }
+  // The host records the active preference here, so the run restores what it
+  // found instead of assuming the profile starts on `system`.
+  const initial = await cdp.evaluate('document.documentElement.dataset.dsThemeSource')
+  const surfaces = new Map()
+  const problems = []
+  for (const theme of ['light', 'dark']) {
+    await applyTheme(cdp, theme)
+    // The trigger is measured with the dialog closed: an open dialog
+    // highlights the pill on purpose, so its resting surface is the contract.
+    const pill = await pillSurface(cdp)
+    if (pill.pillBackground === null) {
+      throw new ProductFailure(`the usage pill is not in the stats row in the ${theme} theme`)
+    }
+    if (!await clickLabel(cdp, [CODEX_PILL])) {
+      throw new HarnessFailure(`the usage pill could not be clicked in the ${theme} theme`)
+    }
+    if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(USAGE_DIALOG)}) !== null)()`, 10_000)) {
+      throw new ProductFailure(`the usage dialog did not open in the ${theme} theme`)
+    }
+    const surface = await dialogSurface(cdp)
+    surfaces.set(theme, surface)
+    await captureScreenshot(cdp, join(evidence, `dialog-surface-${theme}.png`))
+    for (const wrong of surfaceMismatches(surface, pill)) problems.push(`${theme} theme: ${wrong}`)
+    await pressKey(cdp, 'Escape', 27)
+    if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(USAGE_DIALOG)}) === null)()`, 5_000)) {
+      throw new HarnessFailure(`the usage dialog did not close after the ${theme} surface check`)
+    }
+  }
+  const light = surfaces.get('light')
+  const dark = surfaces.get('dark')
+  // A fill that does not move with the theme means the probes read one theme
+  // twice, so the dark pass would say nothing about the dark palette.
+  if (light !== null && light !== undefined && dark !== null && dark !== undefined
+    && light.menuFill === dark.menuFill) {
+    problems.push('the menu fill did not change with the theme, so the dark pass proves nothing')
+  }
+  // Report the surface findings before restoring the theme: a restore that
+  // fails must not replace them, because a product failure is never retried
+  // and a harness failure exits 2 without one.
+  if (problems.length > 0) throw new ProductFailure(`the usage dialog surface is wrong:\n  ${problems.join('\n  ')}`)
+  // Leave the host on the preference it started with.
+  await applyTheme(cdp, THEME_LABELS[initial] === undefined ? 'system' : initial)
+  console.log('ok: the usage dialog wears the host menu material in both themes, and the pill stays transparent')
+}
+
+/**
+ * Switch the host's theme through the Appearance cubes in Settings → General
+ * and assert the host applied it. The cubes are the host's own controls, so
+ * this exercises the theme path a user takes rather than setting the body
+ * attribute behind the host's back.
+ */
+async function applyTheme(cdp, theme) {
+  const labels = THEME_LABELS[theme]
+  if (!await clickLabel(cdp, ['Settings', '设置'])) {
+    throw new HarnessFailure('the settings trigger did not open the panel for the theme switch')
+  }
+  // The Appearance row is a `settings.general.item`; the General section is
+  // reachable from the nav rail whether or not the panel opened on it.
+  await clickLabel(cdp, ['General', '通用设置'])
+  const clicked = await cdp.evaluate(`(() => {
+    const wanted = ${JSON.stringify(labels)}
+    const cube = [...document.querySelectorAll('button[aria-pressed]')]
+      .find(node => wanted.includes((node.innerText || '').trim()))
+    if (cube === undefined) return false
+    cube.click()
+    return true
+  })()`)
+  if (clicked !== true) throw new HarnessFailure(`the Appearance row has no ${theme} cube`)
+  // `system` follows the OS, so its dark attribute is whatever the media query
+  // says; the other two are the preference itself. Both are read from the host
+  // so a preference that silently failed to apply is caught here.
+  const applied = theme === 'system'
+    ? `document.documentElement.dataset.dsThemeSource === 'system' && document.body.hasAttribute('data-ds-dark-theme') === matchMedia('(prefers-color-scheme: dark)').matches`
+    : `document.documentElement.dataset.dsThemeSource === ${JSON.stringify(theme)} && document.body.hasAttribute('data-ds-dark-theme') === ${theme === 'dark'}`
+  if (!await waitFor(cdp, `(() => ${applied})()`, 10_000)) {
+    throw new HarnessFailure(`the host did not apply the ${theme} theme`)
+  }
+  await pressKey(cdp, 'Escape', 27)
+  await delay(400)
+}
+
+/**
+ * The open dialog's surface, with the same theme tokens resolved through
+ * probe elements. Computed values are compared, so no color syntax is parsed
+ * and no palette is hard-coded here.
+ */
+function dialogSurface(cdp) {
+  return cdp.evaluate(`(() => {
+    const panel = document.querySelector(${JSON.stringify(USAGE_DIALOG)})
+    if (panel === null) return null
+    const probe = (value, property) => {
+      const node = document.createElement('div')
+      node.style.setProperty(property, value)
+      document.body.appendChild(node)
+      const computed = getComputedStyle(node)
+      const resolved = property === 'background' ? computed.backgroundColor : computed.backdropFilter
+      node.remove()
+      return resolved
+    }
+    return {
+      background: getComputedStyle(panel).backgroundColor,
+      backdropFilter: getComputedStyle(panel).backdropFilter,
+      menuFill: probe('var(--dsw-specific-menu)', 'background'),
+      menuBlur: probe('var(--dsw-menu-backdrop-filter)', 'backdrop-filter'),
+    }
+  })()`)
+}
+
+/** The collapsed pill's resting surface, judged against a transparent probe. */
+function pillSurface(cdp) {
+  const statsRow = HOST_CONTRACT.markers.composerStats.attribute
+  return cdp.evaluate(`(() => {
+    const pill = [...document.querySelectorAll('[${statsRow}] button')]
+      .find(node => (node.getAttribute('aria-label') || '').includes(${JSON.stringify(CODEX_PILL)}))
+    const probe = document.createElement('div')
+    probe.style.setProperty('background', 'transparent')
+    document.body.appendChild(probe)
+    const transparent = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    return { pillBackground: pill === undefined ? null : getComputedStyle(pill).backgroundColor, transparent }
+  })()`)
+}
+
+/** How the dialog's surface diverges from the host menu material; empty when it matches. */
+function surfaceMismatches(surface, pill) {
+  const wrong = []
+  if (surface === null || surface === undefined) {
+    wrong.push('the usage dialog panel is not in the DOM')
+  } else if (surface.menuBlur === 'none') {
+    wrong.push('the host theme defines no menu backdrop filter, so this check cannot judge the surface')
+  } else if (surface.backdropFilter !== surface.menuBlur) {
+    wrong.push(`backdrop-filter is ${JSON.stringify(surface.backdropFilter)}, expected the host menu material ${JSON.stringify(surface.menuBlur)}`)
+  }
+  if (surface !== null && surface !== undefined && surface.background !== surface.menuFill) {
+    wrong.push(`background is ${JSON.stringify(surface.background)}, expected the host menu fill ${JSON.stringify(surface.menuFill)}`)
+  }
+  if (pill.pillBackground !== pill.transparent) {
+    wrong.push(`the collapsed pill painted its own background (${JSON.stringify(pill.pillBackground)}); it must stay transparent`)
+  }
+  return wrong
+}
+
+/** Write one screenshot into the run's evidence directory. */
+async function captureScreenshot(cdp, path) {
+  const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, Buffer.from(shot.data, 'base64'))
 }
 
 /** Whether a page request would leave loopback; data:, blob:, and the like never do. */
