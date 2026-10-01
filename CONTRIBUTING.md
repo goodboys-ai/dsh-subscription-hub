@@ -10,6 +10,14 @@ the chosen approach and its meaningful trade-offs. In AI disclosure, name the
 tool and share a relevant prompt, conversation link, or summary of the work
 delegated to it; use `N/A` when no AI tool was used.
 
+Repository markdown (docs/, README.md, this file, .agents/notes/) keeps
+its 80-column wrap: it is read in an editor and reviewed as a diff, and
+GitHub renders those files with soft line breaks, so the wrap does not
+show on the page. Only prose written for a surface GitHub renders as a
+standalone body — PR descriptions and issue/PR comments — is written one
+line per paragraph, because there a single newline inside a paragraph is
+a hard line break, so a wrapped body shows as sentences broken mid-line.
+
 ## Set up and check a change
 
 CI uses Node.js 24, and `package.json` pins pnpm 10.33.2. From a checkout:
