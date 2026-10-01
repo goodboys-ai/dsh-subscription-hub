@@ -100,8 +100,9 @@ Specific choices inside the E2E:
 The boot smoke keeps only the logged-out checks and needs no browser.
 
 The host-export and host contract checks, the boot smoke, and the host E2E
-exit 1 only for a finding they explicitly recognise (a compiler diagnostic, a missing contract name
-or host package, the host refusing the plugin's peers, a failed assertion)
+exit 1 only for a finding they explicitly recognise (a compiler diagnostic,
+a missing contract name or host package, the host refusing the plugin's
+peers, a failed assertion)
 and exit 2 for everything else, including unexpected exceptions. The
 nightly job opens an issue only for exit 1. The other default was tried
 first and kept leaking: every uncaught setup error (an npm outage, an

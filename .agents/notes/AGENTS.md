@@ -74,6 +74,13 @@ Move durable decision history out of standing docs and link to its note.
 
 ## Lint
 
+Wrap prose at 80 columns. Run `npx --yes markdownlint-cli2@0.22.0` from the
+repository root; CI runs the same pinned Markdown linter. The root
+`.markdownlint-cli2.jsonc` enables only MD013 for Agent Notes and these
+rules, not other repository Markdown. Code blocks, tables, and lines with
+no whitespace past column 80 (such as an indivisible link) are exempt.
+Archived notes remain frozen and are excluded from the wrapping check.
+
 `node scripts/verify-agent-notes.mjs` (also a CI job) enforces the shape:
 `{proposed,implemented,rejected,archived}/` lifecycle folders, the closed
 class set,
