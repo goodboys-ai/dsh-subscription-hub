@@ -486,10 +486,20 @@ export interface UsageWindow {
   usedPercent: number
   /** Epoch milliseconds at which the window resets, when the provider discloses it. */
   resetsAt?: number
+  /** Epoch milliseconds of the billing/window start, when disclosed. */
+  startsAt?: number
+  /** Reported duration; not sufficient to establish fixed-window semantics. */
+  windowDurationMs?: number
+  /** Provider-verified fixed interval; permits deriving start from end and duration. */
+  fixedWindow?: boolean
 }
 
 /** Subscription usage of one provider, as served by the `usage` RPC endpoint. */
 export interface ProviderUsage {
+  /** Original successful observation time, preserved across cache reads. */
+  observedAt?: number
+  /** Last refresh failed; cached numbers are display-only until recovery. */
+  stale?: boolean
   /** False when the provider has no usage endpoint (grok); windows are absent then. */
   supported: boolean
   /** Usage windows in display order. */

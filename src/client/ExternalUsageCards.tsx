@@ -4,6 +4,8 @@ import type { ProviderUsage, SubscriptionsSectionInjected } from './Subscription
 import { callSubscriptionsAuth } from './subscriptions-rpc.js'
 import { subscriptionCardStyles as styles } from './subscription-card-styles.js'
 import { USAGE_BADGE_REFRESH_EVENT } from './usage-badge-preferences.js'
+import { UsageMeter } from './UsageMeter.js'
+import { displayUsedPercent } from './usage-pace.js'
 
 type Source = 'opencode-go' | 'kimi-code'
 type Translate = SubscriptionsSectionInjected['t']
@@ -19,26 +21,23 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function barColor(percent: number): string {
-  if (percent >= 95) return 'var(--dsw-alias-state-error-primary)'
-  if (percent >= 80) return 'var(--dsw-alias-state-warn-label)'
-  return 'var(--dsw-alias-state-success-primary)'
-}
-
 /** Quota cards for API-key providers already available through DSH itself. */
 export function ExternalUsageCards({ rpc, t }: { rpc: ConnectionHandle['rpc']; t: Translate }) {
   const [status, setStatus] = useState<Status>()
   const [statusError, setStatusError] = useState<string>()
   const [usage, setUsage] = useState<Partial<Record<Source, ProviderUsage>>>({})
+  const [observedAt, setObservedAt] = useState<Partial<Record<Source, number>>>({})
   const [errors, setErrors] = useState<Partial<Record<Source, string>>>({})
   const [loading, setLoading] = useState<Partial<Record<Source, boolean>>>({})
 
   const refresh = useCallback(async (source: Source) => {
     setLoading(prev => ({ ...prev, [source]: true }))
-    setErrors(prev => ({ ...prev, [source]: undefined }))
     try {
       const value = await callSubscriptionsAuth<ProviderUsage>(rpc, 'externalUsage', { source })
       setUsage(prev => ({ ...prev, [source]: value }))
+      // Prefer the server's observation time; a cached reading must not look fresh.
+      setObservedAt(prev => ({ ...prev, [source]: value.observedAt ?? Date.now() }))
+      setErrors(prev => ({ ...prev, [source]: undefined }))
       window.dispatchEvent(new Event(USAGE_BADGE_REFRESH_EVENT))
     } catch (error) {
       setErrors(prev => ({ ...prev, [source]: errorText(error) }))
@@ -93,19 +92,17 @@ export function ExternalUsageCards({ rpc, t }: { rpc: ConnectionHandle['rpc']; t
             {errors[id] !== undefined && <p style={styles.error}>{t('usageError', { message: errors[id] })}</p>}
             {snapshot?.windows?.length === 0 && <p style={styles.status}>{t('usageEmpty')}</p>}
             {snapshot?.windows?.map((window, index) => {
-              const percent = Math.min(100, Math.max(0, window.usedPercent))
+              const percent = displayUsedPercent(window.usedPercent)
               const label = window.kind === 'session' ? t('usageSession')
                 : window.kind === 'weekly' ? t('usageWeekly')
                   : window.scope === 'Monthly' ? t('usageMonthly') : window.scope ?? t('usageWindow')
               return <div key={index} style={styles.usageRow}>
                 <div style={styles.usageMeta}>
                   <span>{label}</span>
-                  <span>{Math.round(percent)}%{window.resetsAt === undefined ? ''
+                  <span>{percent === undefined ? t('usageMeterInvalid') : `${percent}%`}{window.resetsAt === undefined ? ''
                     : ` · ${t('usageResets', { date: new Date(window.resetsAt).toLocaleString() })}`}</span>
                 </div>
-                <div style={styles.usageTrack}>
-                  <div style={{ ...styles.usageFill, width: `${percent}%`, background: barColor(percent) }} />
-                </div>
+                <UsageMeter window={window} t={t} observedAt={observedAt[id]} stale={errors[id] !== undefined || snapshot?.stale === true} />
               </div>
             })}
           </div>

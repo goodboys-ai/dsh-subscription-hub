@@ -151,7 +151,7 @@ export class PoolUsageTracker {
         // every display surface — this is what was previously showing, so
         // keep showing it (even through a forced refresh: retrying past the
         // cooldown is exactly the retry storm `cooldownMs` exists to avoid).
-        return entry.lastSnapshot
+        return { ...entry.lastSnapshot, stale: true }
       } else {
         throw entry.error
       }
@@ -163,7 +163,7 @@ export class PoolUsageTracker {
       // fetch that just failed on THIS call: `refresh` recorded whatever
       // snapshot was on record before it ran onto the new failure entry.
       const failed = this.entries.get(key)
-      if (failed?.snapshot === undefined && failed?.lastSnapshot !== undefined) return failed.lastSnapshot
+      if (failed?.snapshot === undefined && failed?.lastSnapshot !== undefined) return { ...failed.lastSnapshot, stale: true }
       throw error
     }
   }
@@ -198,8 +198,10 @@ export class PoolUsageTracker {
       const prior = this.entries.get(key)
       const lastSnapshot = prior?.snapshot ?? prior?.lastSnapshot
       pending = fetcher().then(
-        (snapshot) => {
-          this.entries.set(key, { snapshot, at: Date.now() })
+        (value) => {
+          const at = Date.now()
+          const snapshot = { ...value, observedAt: at, stale: false }
+          this.entries.set(key, { snapshot, at })
           return snapshot
         },
         (error: unknown) => {

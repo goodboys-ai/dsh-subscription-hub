@@ -5,6 +5,8 @@ import { callSubscriptionsAuth } from './subscriptions-rpc.js'
 import { ProviderAccountManager } from './ProviderAccountManager.js'
 import { USAGE_BADGE_REFRESH_EVENT } from './usage-badge-preferences.js'
 import { subscriptionCardStyles as styles } from './subscription-card-styles.js'
+import { UsageMeter } from './UsageMeter.js'
+import { displayUsedPercent } from './usage-pace.js'
 
 type Translate = SubscriptionsSectionInjected['t']
 type CursorStatus = { authenticated: boolean; busy: boolean; expiresAt?: number; error?: string }
@@ -13,16 +15,12 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function barColor(percent: number): string {
-  if (percent >= 95) return 'var(--dsw-alias-state-error-primary)'
-  if (percent >= 80) return 'var(--dsw-alias-state-warn-label)'
-  return 'var(--dsw-alias-state-success-primary)'
-}
-
 /** Cursor's single connected account, rendered with the same card and Manage dialog as the other providers. */
 export function CursorCard({ rpc, t }: { rpc: ConnectionHandle['rpc']; t: Translate }) {
   const [status, setStatus] = useState<CursorStatus>()
   const [usage, setUsage] = useState<ProviderUsage>()
+  const [observedAt, setObservedAt] = useState<number>()
+  const [usageStale, setUsageStale] = useState(false)
   const [authorizeUrl, setAuthorizeUrl] = useState<string>()
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(false)
@@ -45,10 +43,14 @@ export function CursorCard({ rpc, t }: { rpc: ConnectionHandle['rpc']; t: Transl
   const refreshUsage = useCallback(async () => {
     setLoading(true)
     try {
-      setUsage(await callSubscriptionsAuth<ProviderUsage>(rpc, 'cursorUsage', {}))
+      const value = await callSubscriptionsAuth<ProviderUsage>(rpc, 'cursorUsage', {})
+      setUsage(value)
+      // Prefer the server's observation time; a cached reading must not look fresh.
+      setObservedAt(value.observedAt ?? Date.now())
+      setUsageStale(value.stale === true)
       setError(undefined)
       window.dispatchEvent(new Event(USAGE_BADGE_REFRESH_EVENT))
-    } catch (failure) { setError(message(failure)) }
+    } catch (failure) { setError(message(failure)); setUsageStale(true) }
     finally { setLoading(false) }
   }, [rpc])
 
@@ -81,6 +83,8 @@ export function CursorCard({ rpc, t }: { rpc: ConnectionHandle['rpc']; t: Transl
     try {
       await callSubscriptionsAuth(rpc, 'cursorLogout', {})
       setUsage(undefined)
+      setObservedAt(undefined)
+      setUsageStale(false)
       await refreshStatus()
     } catch (failure) { setError(message(failure)) }
   }
@@ -114,7 +118,7 @@ export function CursorCard({ rpc, t }: { rpc: ConnectionHandle['rpc']; t: Transl
         {loading && usage === undefined && <p style={styles.status}>{t('usageLoading')}</p>}
         {usage?.windows?.length === 0 && <p style={styles.status}>{t('usageEmpty')}</p>}
         {usage?.windows?.map((window, index) => {
-          const percent = Math.min(100, Math.max(0, window.usedPercent))
+          const percent = displayUsedPercent(window.usedPercent)
           const label = window.scope === 'Included' ? t('cursorIncluded')
             : window.scope === 'Cursor Models' ? t('cursorModels')
               : window.scope === 'Other Models' ? t('cursorOtherModels')
@@ -123,12 +127,10 @@ export function CursorCard({ rpc, t }: { rpc: ConnectionHandle['rpc']; t: Transl
           return <div key={index} style={styles.usageRow}>
             <div style={styles.usageMeta}>
               <span>{label}</span>
-              <span>{Math.round(percent)}%{window.resetsAt === undefined ? ''
+              <span>{percent === undefined ? t('usageMeterInvalid') : `${percent}%`}{window.resetsAt === undefined ? ''
                 : ` · ${t('usageResets', { date: new Date(window.resetsAt).toLocaleString() })}`}</span>
             </div>
-            <div style={styles.usageTrack}>
-              <div style={{ width: `${percent}%`, height: '100%', borderRadius: 3, background: barColor(percent) }} />
-            </div>
+            <UsageMeter window={window} t={t} observedAt={observedAt} stale={usageStale} />
           </div>
         })}
       </div>

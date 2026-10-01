@@ -41,6 +41,11 @@ const CURSOR_ACCESS = 'fake.eyJzdWIiOiJhdXRoMHx1c2VyX2JhciIsImV4cCI6NDEwMjQ0NDgw
  * request streams CODEX_REPLY instead. `required` requests must appear in
  * the preload's log by the end of the run.
  */
+// The same epoch can be supplied to baseline and candidate screenshot runs.
+const fixtureNow = Number(process.env.HOST_E2E_FIXTURE_NOW ?? Date.now())
+const periodStart = new Date(fixtureNow - 6 * 60 * 60_000).toISOString()
+const periodEnd = new Date(fixtureNow + 18 * 60 * 60_000).toISOString()
+
 export const FIXTURE_REQUESTS = {
   'POST https://chatgpt.com/backend-api/codex/responses': {
     credential: ['authorization', 'Bearer fake-codex-access'],
@@ -62,7 +67,8 @@ export const FIXTURE_REQUESTS = {
   },
   'GET https://cli-chat-proxy.grok.com/v1/billing?format=credits': {
     credential: ['authorization', 'Bearer fake-grok-access'],
-    body: { config: { creditUsagePercent: USAGE_PERCENT.grok.percent, subscriptionTier: 'SuperGrok' } },
+    body: { config: { creditUsagePercent: USAGE_PERCENT.grok.percent, subscriptionTier: 'SuperGrok',
+      currentPeriod: { start: periodStart, end: periodEnd } } },
     required: true,
   },
   'POST https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels': {
@@ -77,7 +83,8 @@ export const FIXTURE_REQUESTS = {
   },
   'GET https://cursor.com/api/usage-summary': {
     credential: ['cookie', `WorkosCursorSessionToken=user_bar::${CURSOR_ACCESS}`],
-    body: { membershipType: 'pro', individualUsage: { plan: { totalPercentUsed: USAGE_PERCENT['cursor-subscription'].percent } } },
+    body: { membershipType: 'pro', billingCycleStart: periodStart, billingCycleEnd: periodEnd,
+      individualUsage: { plan: { totalPercentUsed: USAGE_PERCENT['cursor-subscription'].percent } } },
     required: true,
   },
   'GET https://cursor.com/api/usage?user=user_bar': {

@@ -16,7 +16,7 @@ test('Cursor usage reads individual dashboard pools and legacy requests with a l
     assert.equal(headers.origin, 'https://cursor.com')
     return String(url).includes('usage-summary')
       ? Response.json({
-        membershipType: 'pro', billingCycleEnd: '2026-10-15T00:00:00Z',
+        membershipType: 'pro', billingCycleStart: '2026-09-15T00:00:00Z', billingCycleEnd: '2026-10-15T00:00:00Z',
         individualUsage: { plan: { totalPercentUsed: 40, autoPercentUsed: 12.5, apiPercentUsed: 67 } },
       })
       : Response.json({ 'gpt-4': { numRequests: 30, maxRequestUsage: 100 } })
@@ -28,10 +28,10 @@ test('Cursor usage reads individual dashboard pools and legacy requests with a l
   ])
   assert.deepEqual(result, {
     supported: true, plan: 'pro', windows: [
-      { kind: 'other', scope: 'Included', usedPercent: 40, resetsAt: Date.parse('2026-10-15T00:00:00Z') },
-      { kind: 'other', scope: 'Cursor Models', usedPercent: 12.5, resetsAt: Date.parse('2026-10-15T00:00:00Z') },
-      { kind: 'other', scope: 'Other Models', usedPercent: 67, resetsAt: Date.parse('2026-10-15T00:00:00Z') },
-      { kind: 'other', scope: 'Included requests', usedPercent: 30, resetsAt: Date.parse('2026-10-15T00:00:00Z') },
+      { kind: 'other', scope: 'Included', usedPercent: 40, startsAt: Date.parse('2026-09-15T00:00:00Z'), resetsAt: Date.parse('2026-10-15T00:00:00Z') },
+      { kind: 'other', scope: 'Cursor Models', usedPercent: 12.5, startsAt: Date.parse('2026-09-15T00:00:00Z'), resetsAt: Date.parse('2026-10-15T00:00:00Z') },
+      { kind: 'other', scope: 'Other Models', usedPercent: 67, startsAt: Date.parse('2026-09-15T00:00:00Z'), resetsAt: Date.parse('2026-10-15T00:00:00Z') },
+      { kind: 'other', scope: 'Included requests', usedPercent: 30, startsAt: Date.parse('2026-09-15T00:00:00Z'), resetsAt: Date.parse('2026-10-15T00:00:00Z') },
     ],
   })
   assert.ok(!JSON.stringify(result).includes(access))

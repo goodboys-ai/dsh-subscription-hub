@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { readUsageBadgeMode, setUsageBadgeMode, subscribeUsageBadgeMode } from '../src/client/usage-badge-preferences.js'
 import { UsageBadgeDisplaySetting } from '../src/client/UsageBadgeDisplaySetting.js'
 import { en, zh } from '../src/client/locales.js'
+import { readUsageColorPreset, setUsageColorPreset, subscribeUsageColorPreset } from '../src/client/usage-color-preferences.js'
 
 const key = 'dsh.subscriptions.usageBadgeMode'
 
@@ -33,10 +34,35 @@ test('display preference defaults safely without a browser and renders bilingual
     assert.ok(html.includes(dictionary.usageBadgeDisplay))
     assert.ok(html.includes(dictionary.usageBadgeDisplayHidden))
     assert.ok(html.includes(dictionary.usageBadgeDisplayRecent))
-    assert.equal((html.match(/<option /g) ?? []).length, 2)
+    assert.equal((html.match(/<option /g) ?? []).length, 5)
+    assert.equal((html.match(/<select /g) ?? []).length, 2)
+    assert.ok(html.includes(dictionary.usageColorLabel))
+    assert.ok(html.includes(dictionary.usageColorStandard))
     assert.ok(html.includes('<label'))
   }
 })
+
+test('color presets validate, persist and synchronize across tabs', () => withBrowser(browser => {
+  const colorKey = 'dsh.subscriptions.usageColorPreset'
+  let updates = 0
+  const stop = subscribeUsageColorPreset(() => { updates++ })
+  assert.equal(readUsageColorPreset(), 'standard')
+  for (const value of ['relaxed', 'remaining', 'standard'] as const) {
+    setUsageColorPreset(value)
+    assert.equal(readUsageColorPreset(), value)
+  }
+  assert.equal(updates, 3)
+  browser.values.set(colorKey, 'invalid')
+  assert.equal(readUsageColorPreset(), 'standard')
+  assert.throws(() => Reflect.apply(setUsageColorPreset, undefined, ['invalid']), TypeError)
+  const event = new Event('storage')
+  Object.defineProperty(event, 'key', { value: colorKey })
+  browser.dispatchEvent(event)
+  assert.equal(updates, 4)
+  stop()
+  setUsageColorPreset('remaining')
+  assert.equal(updates, 4)
+}))
 
 test('saving persists only the display mode and notifies same-tab subscribers', () => withBrowser(browser => {
   let updates = 0

@@ -110,22 +110,24 @@ test('snapshotFor: a rate limit after a prior success serves the stale snapshot 
   }, 10)
 
   const first = await tracker.snapshotFor('claude', 'a1')
-  assert.deepEqual(first, OK_USAGE)
+  assert.deepEqual(first.windows, OK_USAGE.windows)
+  assert.equal(first.stale, false)
+  assert.equal(typeof first.observedAt, 'number')
 
   // Past the 10ms TTL, so the next call re-fetches instead of serving the
   // fresh-cache fast path.
   await new Promise(resolve => setTimeout(resolve, 20))
   rateLimited = true
   const second = await tracker.snapshotFor('claude', 'a1')
-  assert.deepEqual(second, OK_USAGE, 'a rate-limited refresh should serve the last-known snapshot, not throw')
+  assert.deepEqual(second, { ...first, stale: true }, 'cached readings preserve their original observation time and expose failure')
   assert.equal(calls.count, 2)
 
   // Still cooling down: repeat calls (forced or not) keep serving the
   // stale snapshot rather than re-hitting the endpoint or throwing.
   const third = await tracker.snapshotFor('claude', 'a1')
   const forced = await tracker.snapshotFor('claude', 'a1', true)
-  assert.deepEqual(third, OK_USAGE)
-  assert.deepEqual(forced, OK_USAGE)
+  assert.deepEqual(third, second)
+  assert.deepEqual(forced, second)
   assert.equal(calls.count, 2, 'the live cooldown must not be bypassed even by a forced call')
 })
 
@@ -140,27 +142,31 @@ test('snapshotFor: the stale snapshot is carried across consecutive failure cool
     return Promise.resolve(answer)
   }, 10)
 
-  assert.deepEqual(await tracker.snapshotFor('claude', 'a1'), OK_USAGE)
+  const original = await tracker.snapshotFor('claude', 'a1')
+  assert.deepEqual(original.windows, OK_USAGE.windows)
   await new Promise(resolve => setTimeout(resolve, 20))
   answer = 'rate-limited'
 
   // First failure: the snapshot on record is carried onto the failure entry.
-  assert.deepEqual(await tracker.snapshotFor('claude', 'a1'), OK_USAGE)
+  assert.deepEqual(await tracker.snapshotFor('claude', 'a1'), { ...original, stale: true })
   assert.equal(calls.count, 2)
 
   // The cooldown expires and the retry fails AGAIN. The entry being replaced
   // is now a failure entry, not a snapshot — its carried snapshot must be
   // carried forward once more rather than dropped.
   await new Promise(resolve => setTimeout(resolve, 20))
-  assert.deepEqual(await tracker.snapshotFor('claude', 'a1'), OK_USAGE, 'a second consecutive failure must not lose the stale snapshot')
+  assert.deepEqual(await tracker.snapshotFor('claude', 'a1'), { ...original, stale: true }, 'a second consecutive failure must not lose the stale snapshot')
   assert.equal(calls.count, 3, 'the expired cooldown allowed one retry')
-  assert.deepEqual(await tracker.snapshotFor('claude', 'a1'), OK_USAGE, 'and the new cooldown keeps serving it')
+  assert.deepEqual(await tracker.snapshotFor('claude', 'a1'), { ...original, stale: true }, 'and the new cooldown keeps serving it')
   assert.equal(calls.count, 3)
 
   // A later success replaces the stale snapshot for real.
   await new Promise(resolve => setTimeout(resolve, 20))
   answer = FRESH_USAGE
-  assert.deepEqual(await tracker.snapshotFor('claude', 'a1'), FRESH_USAGE)
+  const recovered = await tracker.snapshotFor('claude', 'a1')
+  assert.deepEqual(recovered.windows, FRESH_USAGE.windows)
+  assert.equal(recovered.stale, false)
+  assert.ok(recovered.observedAt! > original.observedAt!)
   assert.equal(calls.count, 4)
 })
 

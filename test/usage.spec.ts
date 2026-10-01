@@ -77,8 +77,8 @@ test('fetchCodexUsage maps windows, plan, and reset timestamps', async () => {
     supported: true,
     plan: 'plus',
     windows: [
-      { kind: 'session', usedPercent: 27, resetsAt: 1_782_770_922_000 },
-      { kind: 'weekly', usedPercent: 4, resetsAt: 1_783_357_722_000 },
+      { kind: 'session', usedPercent: 27, resetsAt: 1_782_770_922_000, windowDurationMs: 18_000_000 },
+      { kind: 'weekly', usedPercent: 4, resetsAt: 1_783_357_722_000, windowDurationMs: 604_800_000 },
     ],
   })
   assert.equal(requests.length, 1)
@@ -96,7 +96,7 @@ test('fetchCodexUsage classifies a weekly primary window by duration', async () 
   })
   const usage = await fetchCodexUsage(codexSession, fetchFn)
   assert.deepEqual(usage.windows, [
-    { kind: 'weekly', usedPercent: 39, resetsAt: 1_783_357_722_000 },
+    { kind: 'weekly', usedPercent: 39, resetsAt: 1_783_357_722_000, windowDurationMs: 604_800_000 },
   ])
 })
 
@@ -109,8 +109,8 @@ test('fetchCodexUsage maps unrecognized durations to other, not a fixed label', 
   })
   const usage = await fetchCodexUsage(codexSession, fetchFn)
   assert.deepEqual(usage.windows, [
-    { kind: 'session', usedPercent: 10 },
-    { kind: 'other', usedPercent: 5 },
+    { kind: 'session', usedPercent: 10, windowDurationMs: 18_000_000 },
+    { kind: 'other', usedPercent: 5, windowDurationMs: 3_600_000 },
   ])
 })
 
@@ -216,7 +216,7 @@ test('fetchGrokUsage maps the credits-config shape (weekly percent + reset)', as
     supported: true,
     plan: 'SuperGrok Heavy',
     windows: [
-      { kind: 'weekly', usedPercent: 2, resetsAt: Date.parse('2026-08-18T10:14:00Z') },
+      { kind: 'weekly', usedPercent: 2, startsAt: Date.parse('2026-08-11T10:14:00Z'), resetsAt: Date.parse('2026-08-18T10:14:00Z') },
     ],
   })
   assert.match(requests[0].url, /cli-chat-proxy\.grok\.com\/v1\/billing\?format=credits/)
