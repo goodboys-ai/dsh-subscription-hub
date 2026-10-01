@@ -660,36 +660,48 @@ async function checkDialogSurface(cdp, evidence) {
   const initial = await cdp.evaluate('document.documentElement.dataset.dsThemeSource')
   const surfaces = new Map()
   const problems = []
-  for (const theme of ['light', 'dark']) {
-    await applyTheme(cdp, theme)
-    // The trigger is measured with the dialog closed: an open dialog
-    // highlights the pill on purpose, so its resting surface is the contract.
-    const pill = await pillSurface(cdp)
-    if (pill.pillBackground === null) {
-      throw new ProductFailure(`the usage pill is not in the stats row in the ${theme} theme`)
+  try {
+    for (const theme of ['light', 'dark']) {
+      await applyTheme(cdp, theme)
+      // The trigger is measured with the dialog closed: an open dialog
+      // highlights the pill on purpose, so its resting surface is the contract.
+      const pill = await pillSurface(cdp)
+      if (pill.pillBackground === null) {
+        throw new ProductFailure(`the usage pill is not in the stats row in the ${theme} theme`)
+      }
+      if (!await clickLabel(cdp, [CODEX_PILL])) {
+        throw new HarnessFailure(`the usage pill could not be clicked in the ${theme} theme`)
+      }
+      if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(USAGE_DIALOG)}) !== null)()`, 10_000)) {
+        throw new ProductFailure(`the usage dialog did not open in the ${theme} theme`)
+      }
+      const surface = await dialogSurface(cdp)
+      // The sample wait above is a bounded heuristic: the host can leave the
+      // theme again while the dialog opens. This read happens in the same
+      // synchronous evaluation as the computed styles, so a surface that does
+      // not belong to the requested palette is caught here instead of being
+      // reported as a finding about the theme it actually measured.
+      if (surface.themeSource !== theme || surface.darkTheme !== (theme === 'dark')) {
+        throw new HarnessFailure(`the ${theme} pass measured the ${surface.themeSource} theme`)
+      }
+      surfaces.set(theme, surface)
+      await captureScreenshot(cdp, join(evidence, `dialog-surface-${theme}.png`))
+      for (const wrong of surfaceMismatches(surface, pill)) problems.push(`${theme} theme: ${wrong}`)
+      await pressKey(cdp, 'Escape', 27)
+      if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(USAGE_DIALOG)}) === null)()`, 5_000)) {
+        throw new HarnessFailure(`the usage dialog did not close after the ${theme} surface check`)
+      }
     }
-    if (!await clickLabel(cdp, [CODEX_PILL])) {
-      throw new HarnessFailure(`the usage pill could not be clicked in the ${theme} theme`)
+    const light = surfaces.get('light')
+    const dark = surfaces.get('dark')
+    // A fill that does not move with the theme means the probes read one theme
+    // twice, so the dark pass would say nothing about the dark palette.
+    if (light !== null && light !== undefined && dark !== null && dark !== undefined
+      && light.menuFill === dark.menuFill) {
+      problems.push('the menu fill did not change with the theme, so the dark pass proves nothing')
     }
-    if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(USAGE_DIALOG)}) !== null)()`, 10_000)) {
-      throw new ProductFailure(`the usage dialog did not open in the ${theme} theme`)
-    }
-    const surface = await dialogSurface(cdp)
-    surfaces.set(theme, surface)
-    await captureScreenshot(cdp, join(evidence, `dialog-surface-${theme}.png`))
-    for (const wrong of surfaceMismatches(surface, pill)) problems.push(`${theme} theme: ${wrong}`)
-    await pressKey(cdp, 'Escape', 27)
-    if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(USAGE_DIALOG)}) === null)()`, 5_000)) {
-      throw new HarnessFailure(`the usage dialog did not close after the ${theme} surface check`)
-    }
-  }
-  const light = surfaces.get('light')
-  const dark = surfaces.get('dark')
-  // A fill that does not move with the theme means the probes read one theme
-  // twice, so the dark pass would say nothing about the dark palette.
-  if (light !== null && light !== undefined && dark !== null && dark !== undefined
-    && light.menuFill === dark.menuFill) {
-    problems.push('the menu fill did not change with the theme, so the dark pass proves nothing')
+  } catch (error) {
+    throw surfaceStopFailure(problems, error)
   }
   // Report the surface findings before restoring the theme: a restore that
   // fails must not replace them, because a product failure is never retried
@@ -732,8 +744,75 @@ async function applyTheme(cdp, theme) {
   if (!await waitFor(cdp, `(() => ${applied})()`, 10_000)) {
     throw new HarnessFailure(`the host did not apply the ${theme} theme`)
   }
+  // The attributes flip before the theme settles. On DSH 0.1.7-rc.2 the
+  // preference goes through the settings store and the theme is re-adopted
+  // when the write arrives, so closing the panel can put the page back on the
+  // previous theme for a moment; the first CI run of this check caught it and
+  // it was reproduced locally. Wait for the theme to hold still, or a pass
+  // measures one theme under the other theme's name.
   await pressKey(cdp, 'Escape', 27)
-  await delay(400)
+  if (!await waitForSettledTheme(cdp, theme)) {
+    throw new HarnessFailure(`the ${theme} theme did not hold still after the settings panel closed`)
+  }
+}
+
+/**
+ * What the host currently resolves its theme to: the two attributes it
+ * publishes, the OS scheme it would follow, and the menu fill through a probe
+ * element. The fill moves with the palette without this driver knowing any
+ * color.
+ */
+function themeSample(cdp) {
+  return cdp.evaluate(`(() => {
+    const probe = document.createElement('div')
+    probe.style.setProperty('background', 'var(--dsw-specific-menu)')
+    document.body.appendChild(probe)
+    const menuFill = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    return {
+      source: document.documentElement.dataset.dsThemeSource,
+      dark: document.body.hasAttribute('data-ds-dark-theme'),
+      media: matchMedia('(prefers-color-scheme: dark)').matches,
+      menuFill,
+    }
+  })()`)
+}
+
+/**
+ * Wait until two samples in a row agree and the theme is the one asked for.
+ * One attribute read is not enough: on the hosts `applyTheme` names the
+ * preference lands asynchronously, so the page can leave the requested theme
+ * again after it has already shown it. This is a bounded wait for the flip
+ * that was observed, not a promise that the theme cannot move later, which is
+ * why the surface read checks the palette again in its own evaluation.
+ */
+async function waitForSettledTheme(cdp, theme) {
+  let previous = await themeSample(cdp)
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await delay(250)
+    const current = await themeSample(cdp)
+    const still = current.source === previous.source && current.dark === previous.dark
+      && current.menuFill === previous.menuFill
+    const wanted = current.source === theme
+      && current.dark === (theme === 'system' ? current.media : theme === 'dark')
+    if (still && wanted) return true
+    previous = current
+  }
+  return false
+}
+
+/**
+ * What to report when the surface check stops before both themes are done. A
+ * finding already measured is not made uncertain by a driver step that fails
+ * after it, and the browser retry would only repeat that step, so the finding
+ * and the step that stopped the check are reported together as the product
+ * failure. With nothing measured, or after an exception that says nothing
+ * about the plugin, the driver keeps its own classification and its retry.
+ */
+function surfaceStopFailure(problems, error) {
+  const classified = error instanceof HarnessFailure || error instanceof ProductFailure
+  if (problems.length === 0 || !classified) return error
+  return new ProductFailure(`the usage dialog surface is wrong:\n  ${problems.join('\n  ')}\n  and the check stopped there: ${error.message}`)
 }
 
 /**
@@ -759,6 +838,10 @@ function dialogSurface(cdp) {
       backdropFilter: getComputedStyle(panel).backdropFilter,
       menuFill: probe('var(--dsw-specific-menu)', 'background'),
       menuBlur: probe('var(--dsw-menu-backdrop-filter)', 'backdrop-filter'),
+      // Read with the styles above, so the caller can tell which palette this
+      // surface belongs to without a second, possibly later, evaluation.
+      themeSource: document.documentElement.dataset.dsThemeSource,
+      darkTheme: document.body.hasAttribute('data-ds-dark-theme'),
     }
   })()`)
 }

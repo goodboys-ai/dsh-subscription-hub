@@ -305,8 +305,12 @@ script:
      themes, and the collapsed pill stays transparent. The driver switches
      themes through the host's Appearance cubes and compares the dialog's
      computed fill and blur against probes resolving the same tokens, saving
-     a screenshot per theme. The fill is translucent by design, so a dialog
-     that keeps it without the blur leaves the transcript behind it readable;
+     a screenshot per theme. The switch waits for the theme to settle rather
+     than for the first attribute change: on DSH 0.1.7-rc.2 the preference
+     lands asynchronously and the theme is re-adopted after the panel closes,
+     which can put the page back on the previous theme mid-pass. The fill is
+     translucent by design, so a dialog that keeps it without the blur
+     leaves the transcript behind it readable;
    - the plugin's settings section renders inside the host's settings
      panel: the panel opens from the host's settings trigger, the nav lists
      the Subscriptions entry, and the section body shows the intro copy,
