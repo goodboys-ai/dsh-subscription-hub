@@ -8,8 +8,10 @@ The published package name `@goodboys-ai/dsh-subscription-hub` is awkward
 everywhere a user types or reads it: the install command, the plugin
 identity in logs and diagnostics, and UI copy. The obvious unscoped name
 `dsh-subscription-hub` was squatted on npm by an unknown third party at
-publication time and later unpublished — but npm permanently reserves
-unpublished names, so it is unrecoverable (verified unavailable). Staying
+publication time and later unpublished — re-registration was unavailable
+when we tried (npm reserves unpublished names per its policy as we
+understand it; we verified only that the name could not be registered,
+not the policy itself). Staying
 on the scoped name is safe; it is also permanently clunky, and the
 install-command friction compounds with every user.
 
@@ -36,9 +38,10 @@ remove the old package first.
   diagnostic friction is permanent, and every release cements the awkward
   name further. The rename cost is one bootstrap plus one deprecation —
   small while the package has ~zero users.
-- **Attempt to recover the unscoped `dsh-subscription-hub`.** Permanently
-  reserved under npm's unpublished-name policy; verified unavailable. Not
-  an option, recorded so nobody re-investigates.
+- **Attempt to recover the unscoped `dsh-subscription-hub`.** Observed
+  unavailable after the squatter's unpublish; the reservation policy
+  itself was not independently verified. Not an option, recorded so
+  nobody re-investigates.
 - **Rename the GitHub repo to match.** Breaks every existing clone, the
   trusted-publisher binding, and the `github:` install refs for no user
   benefit; the repo slug is not user-typed the way the package name is.

@@ -213,8 +213,9 @@ not pre-created.
    exists for the scoped package — so the release PR bumps `package.json`
    to the next version first. After the new name's first publish succeeds,
    deprecate the scoped package so installs resolve to the new name:
-   `npm deprecate @goodboys-ai/dsh-subscription-hub@'*' 'Moved to dsh-subscriptions'`. Manual fallback if the workflow is
-   unavailable:
+   `npm deprecate @goodboys-ai/dsh-subscription-hub@'*' 'Moved to dsh-subscriptions'`.
+
+   Manual fallback if the workflow is unavailable:
    `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`, adding
    `--prerelease` for prerelease versions, and `npm publish --access public`
    for npm (interactive 2FA; provenance is CI-only — `--provenance` requires
