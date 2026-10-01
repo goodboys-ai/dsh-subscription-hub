@@ -1,6 +1,6 @@
 ---
 name: subscription-hub-prose-standard
-description: Use when writing, reviewing, or trimming project-authored prose in dsh-subscription-hub, including docs, Agent Notes, code comments, tests, UI copy, model-visible text, and diagnostics.
+description: Use when writing, reviewing, or trimming project-authored prose in dsh-subscriptions, including docs, Agent Notes, code comments, tests, UI copy, model-visible text, and diagnostics.
 ---
 
 # Subscription Hub prose standard

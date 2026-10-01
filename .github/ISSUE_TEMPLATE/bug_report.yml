@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a bug in dsh-subscription-hub
+description: Report a bug in dsh-subscriptions
 labels: [bug]
 body:
   - type: input

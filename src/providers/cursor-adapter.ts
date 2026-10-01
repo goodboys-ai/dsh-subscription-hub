@@ -1,5 +1,5 @@
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { CursorAdapter } from '@goodboys-ai/dsh-subscription-hub/cursor-transport'
+import { CursorAdapter } from 'dsh-subscriptions/cursor-transport'
 
 /**
  * The imported Cursor transport still reads tool results as user-role content

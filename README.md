@@ -35,7 +35,7 @@ layers. With `dsh` available, install the plugin into the web profile from
 npm:
 
 ```sh
-dsh plugin --profile web add @goodboys-ai/dsh-subscription-hub
+dsh plugin --profile web add dsh-subscriptions
 ```
 
 Or from GitHub source:
@@ -52,8 +52,11 @@ set) and repeat the command:
 
 ```yaml
 allowBuilds:
-  '@goodboys-ai/dsh-subscription-hub': true
+  'dsh-subscriptions': true
 ```
+
+(If a previous Git install used the old scoped name, replace its
+`allowBuilds` key with the one above.)
 
 Restart `dsh web` after installation. Open **Settings → Subscriptions** to
 connect providers, manage accounts and model lists, and inspect available
@@ -119,7 +122,7 @@ contract checks, the boot smoke, and the host E2E) are documented in [docs/testi
 support window and release process in
 [docs/compatibility.md](docs/compatibility.md).
 
-The package is published to npm as `@goodboys-ai/dsh-subscription-hub` (GitHub source installation remains supported). The `cordis.patch.yml` bundle entry and browser module ID use the short project name, `dsh-subscription-hub`.
+The package is published to npm as `dsh-subscriptions`, starting with the first release under the new name (GitHub source installation remains supported). The `cordis.patch.yml` bundle entry and browser module ID use the same package name. Earlier releases were published as `@goodboys-ai/dsh-subscription-hub`; that name will be deprecated in favor of `dsh-subscriptions`. If the old scoped package is installed, remove it before adding the new one — installing both registers the same adapters twice and breaks plugin load.
 
 ## Origins
 

@@ -1,5 +1,5 @@
 {
-  "name": "@goodboys-ai/dsh-subscription-hub",
+  "name": "dsh-subscriptions",
   "version": "0.1.0",
   "description": "Unified subscription providers and usage dashboard for DeepSeek Harness",
   "license": "MIT",

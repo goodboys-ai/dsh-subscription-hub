@@ -87,7 +87,7 @@ but outside the window install and may work, but CI doesn't check them and
 issues against them are closed as "upgrade or wait for the window".
 Versions outside the range are rejected at install unless the user grants an
 exact exemption:
-`dsh plugin --profile web allow-version @goodboys-ai/dsh-subscription-hub@<version> --dsh-version <exact> --accept-risk`.
+`dsh plugin --profile web allow-version dsh-subscriptions@<version> --dsh-version <exact> --accept-risk`.
 That exemption is an at-your-own-risk escape hatch, not support.
 
 ## Compatibility table
@@ -119,13 +119,17 @@ identify one DSH minor. The peer range and CI matrix state host
 compatibility; plugin patches can ship between DSH releases.
 
 Every release tag matches `package.json` (`v0.1.0` for version `0.1.0`). Once
-that tag is published, users can pin with it:
+that tag is published, users can pin with it. The `v0.1.0` release predates
+the package rename, so its npm pin uses the scoped name under which it was
+published:
 
 ```sh
 dsh plugin --profile web add @goodboys-ai/dsh-subscription-hub@0.1.0
 ```
 
-or install the same release from GitHub source:
+Releases from the rename onward pin under the new name, e.g.
+`dsh plugin --profile web add dsh-subscriptions@0.1.1`. Any release can also
+be installed from GitHub source (the repo slug is unchanged):
 
 ```sh
 dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#v0.1.0
@@ -192,14 +196,26 @@ not pre-created.
    section (rendered from `dsh-versions.txt` and `package.json` by
    `scripts/render-release-compat.mjs`) above the auto-generated PR/commit
    notes. In parallel, the `npm-publish` job publishes the package to npm as
-   `@goodboys-ai/dsh-subscription-hub` via OIDC trusted publishing (no
+   `dsh-subscriptions` via OIDC trusted publishing (no
    tokens): versions containing `-` publish under the `alpha` dist-tag so
    `latest` keeps pointing at the newest stable; a version npm already has is
    skipped, which covers reruns and the manually bootstrapped first publish.
-   The first publish ever (a `0.1.0-rc.0` under `alpha`) is done manually by
-   the maintainer, because npm only lets a trusted publisher be configured
-   for a package that already exists; the CI job takes over from `v0.1.0`
-   onward. Manual fallback if the workflow is unavailable:
+   The first publish ever (a `0.1.0-rc.0` under `alpha`) was done manually
+   by the maintainer, because npm only lets a trusted publisher be
+   configured for a package that already exists; the CI job took over from
+   `v0.1.0` onward. The rename to `dsh-subscriptions` needs this bootstrap
+   once more for the new name: publish it manually once (`npm publish
+   --access public` from the release checkout), then configure the trusted
+   publisher on npmjs.com for package `dsh-subscriptions` + repo
+   `goodboys-ai/dsh-subscription-hub` + workflow `release.yml` + no
+   environment; the CI job takes over from the next tag onward. Note the
+   first release under the new name cannot reuse `v0.1.0` — that tag already
+   exists for the scoped package — so the release PR bumps `package.json`
+   to the next version first. After the new name's first publish succeeds,
+   deprecate the scoped package so installs resolve to the new name:
+   `npm deprecate @goodboys-ai/dsh-subscription-hub@'*' 'Moved to dsh-subscriptions'`.
+
+   Manual fallback if the workflow is unavailable:
    `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`, adding
    `--prerelease` for prerelease versions, and `npm publish --access public`
    for npm (interactive 2FA; provenance is CI-only — `--provenance` requires

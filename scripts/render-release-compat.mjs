@@ -72,11 +72,15 @@ const window = readWindow()
 const range = readPeerRange()
 
 let pkgVersion = ''
+let pkgName = ''
 try {
-  pkgVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  pkgVersion = pkg.version
+  pkgName = pkg.name
 } catch {
   fail('package.json is missing or not valid JSON')
 }
+if (typeof pkgName !== 'string' || pkgName.length === 0) fail('package.json has no name')
 const tag = process.argv[2] ?? `v${pkgVersion}`
 
 const lines = [
@@ -84,8 +88,8 @@ const lines = [
   '',
   `- Tested with DSH: ${window.join(', ')}.`,
   `- Installable (peer range): \`${range}\`.`,
-  '- Versions inside the range but outside the tested window install without the gate; use them at your own risk. Versions outside the range are rejected at install unless granted an exact exemption: `dsh plugin --profile web allow-version @goodboys-ai/dsh-subscription-hub@<ver> --dsh-version <exact> --accept-risk`.',
-  `- Install this release: \`dsh plugin --profile web add @goodboys-ai/dsh-subscription-hub@${pkgVersion}\` (or from source: \`dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#${tag}\`).`,
+  `- Versions inside the range but outside the tested window install without the gate; use them at your own risk. Versions outside the range are rejected at install unless granted an exact exemption: \`dsh plugin --profile web allow-version ${pkgName}@<ver> --dsh-version <exact> --accept-risk\`.`,
+  `- Install this release: \`dsh plugin --profile web add ${pkgName}@${pkgVersion}\` (or from source: \`dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#${tag}\`).`,
   '',
 ]
 
