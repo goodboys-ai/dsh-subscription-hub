@@ -10,6 +10,14 @@ the chosen approach and its meaningful trade-offs. In AI disclosure, name the
 tool and share a relevant prompt, conversation link, or summary of the work
 delegated to it; use `N/A` when no AI tool was used.
 
+Repository markdown (docs/, README.md, this file, .agents/notes/) keeps
+its 80-column wrap: it is read in an editor and reviewed as a diff, and
+GitHub renders those files with soft line breaks, so the wrap does not
+show on the page. Only prose written for a surface GitHub renders as a
+standalone body — PR descriptions and issue/PR comments — is written one
+line per paragraph, because there a single newline inside a paragraph is
+a hard line break, so a wrapped body shows as sentences broken mid-line.
+
 ## Set up and check a change
 
 CI uses Node.js 24, and `package.json` pins pnpm 10.33.2. From a checkout:
@@ -62,3 +70,17 @@ For visible UI changes, include a screenshot or recording and state what was
 checked. Update the owning documentation or Agent Note when behavior or a
 durable decision changes. Follow the [prose standard](.agents/skills/subscription-hub-prose-standard/SKILL.md)
 for comments, docs, and user-visible text.
+
+A still proves a state (appearance, layout, an A/B difference); a recording
+proves a behavior (a sequence, timing, a transient state). PR-only stills at
+or below 300 KiB each live at
+`docs/assets/pr-<number>/<subject>-<state>[-<theme>].png`, in lowercase
+kebab-case; use `before-after` for a comparison. Documentation images stay
+in the docs directory that owns them and are not added to `screenshots.json`.
+Recordings, GIFs, and larger stills go to a media-only orphan branch named
+`<series>-assets`, never the pull-request branch, and are embedded as
+`https://github.com/<owner>/<repo>/blob/<branch>/<name>?raw=true`. These
+branches are append-only: never replace a published file, delete the branch,
+or force-push it. The [PR evidence storage
+note](.agents/notes/implemented/process/2026-10-01-pr-evidence-storage.md)
+carries the rationale.

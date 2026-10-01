@@ -104,6 +104,7 @@ export const HOST_CONTRACT = {
       '--dsw-alias-state-success-primary',
       '--dsw-alias-state-warn-label',
       '--dsw-elevation-prominent',
+      '--dsw-menu-backdrop-filter',
       '--dsw-specific-menu',
     ],
   },
