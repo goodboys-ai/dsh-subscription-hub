@@ -119,13 +119,17 @@ identify one DSH minor. The peer range and CI matrix state host
 compatibility; plugin patches can ship between DSH releases.
 
 Every release tag matches `package.json` (`v0.1.0` for version `0.1.0`). Once
-that tag is published, users can pin with it:
+that tag is published, users can pin with it. The `v0.1.0` release predates
+the package rename, so its npm pin uses the scoped name under which it was
+published:
 
 ```sh
-dsh plugin --profile web add dsh-subscriptions@0.1.0
+dsh plugin --profile web add @goodboys-ai/dsh-subscription-hub@0.1.0
 ```
 
-or install the same release from GitHub source:
+Releases from the rename onward pin under the new name, e.g.
+`dsh plugin --profile web add dsh-subscriptions@0.1.1`. Any release can also
+be installed from GitHub source (the repo slug is unchanged):
 
 ```sh
 dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#v0.1.0
@@ -207,7 +211,9 @@ not pre-created.
    environment; the CI job takes over from the next tag onward. Note the
    first release under the new name cannot reuse `v0.1.0` — that tag already
    exists for the scoped package — so the release PR bumps `package.json`
-   to the next version first. Manual fallback if the workflow is
+   to the next version first. After the new name's first publish succeeds,
+   deprecate the scoped package so installs resolve to the new name:
+   `npm deprecate @goodboys-ai/dsh-subscription-hub@'*' 'Moved to dsh-subscriptions'`. Manual fallback if the workflow is
    unavailable:
    `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`, adding
    `--prerelease` for prerelease versions, and `npm publish --access public`
