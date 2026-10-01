@@ -23,9 +23,14 @@ module ID, the `cordis.patch.yml` insert entry, log prefixes, and the
 canonical install command (`dsh plugin --profile web add dsh-subscriptions`).
 The GitHub repository slug `goodboys-ai/dsh-subscription-hub` is unchanged —
 GitHub installs, the trusted-publisher repo binding, and all repo URLs keep
-working. The `v0.1.0` release stays published under the scoped name as
-history; the rename repeats the npm bootstrap for the new name (one manual
-publish, then trusted-publisher re-registration, per
+working. (Update 2026-10-01: the repository was subsequently renamed to
+`goodboys-ai/dsh-subscriptions`; the old slug redirects indefinitely, and
+the npm trusted publisher was registered against the new slug. The
+bootstrap below was completed the same day: manual first publish of
+`dsh-subscriptions@0.1.0`, trusted-publisher registration, and deprecation
+of the scoped package.) The `v0.1.0` release stays published under the
+scoped name as history; the rename repeats the npm bootstrap for the new
+name (one manual publish, then trusted-publisher re-registration, per
 [2026-09-30-npm-trusted-publishing.md](2026-09-30-npm-trusted-publishing.md)),
 and the scoped package is deprecated with a pointer once the new name's
 first publish succeeds. Installing both packages side by side registers the
