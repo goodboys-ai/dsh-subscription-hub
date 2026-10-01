@@ -81,4 +81,6 @@ Recordings, GIFs, and larger stills go to a media-only orphan branch named
 `<series>-assets`, never the pull-request branch, and are embedded as
 `https://github.com/<owner>/<repo>/blob/<branch>/<name>?raw=true`. These
 branches are append-only: never replace a published file, delete the branch,
-or force-push it.
+or force-push it. The [PR evidence storage
+note](.agents/notes/implemented/process/2026-10-01-pr-evidence-storage.md)
+carries the rationale.
