@@ -41,7 +41,7 @@ dsh plugin --profile web add dsh-subscriptions
 Or from GitHub source:
 
 ```sh
-dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub
+dsh plugin --profile web add github:goodboys-ai/dsh-subscriptions
 ```
 
 Git installs run this package's `prepare` script to build the host and browser

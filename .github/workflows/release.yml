@@ -142,7 +142,7 @@ jobs:
 
   # npm publishing via OIDC trusted publishing — no tokens anywhere. The
   # trusted publisher must be configured on npmjs.com for package
-  # dsh-subscriptions + repo goodboys-ai/dsh-subscription-hub + workflow
+  # dsh-subscriptions + repo goodboys-ai/dsh-subscriptions + workflow
   # release.yml + no environment (after the first manual publish below);
   # a mismatch there fails the publish with E404/E403 (see
   # docs/compatibility.md). Runs in parallel with `release`

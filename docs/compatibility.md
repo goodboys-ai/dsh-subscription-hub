@@ -129,10 +129,10 @@ dsh plugin --profile web add @goodboys-ai/dsh-subscription-hub@0.1.0
 
 Releases from the rename onward pin under the new name, e.g.
 `dsh plugin --profile web add dsh-subscriptions@0.1.1`. Any release can also
-be installed from GitHub source (the repo slug is unchanged):
+be installed from GitHub source:
 
 ```sh
-dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#v0.1.0
+dsh plugin --profile web add github:goodboys-ai/dsh-subscriptions#v0.1.0
 ```
 
 That tag is the **downgrade path** — DSH itself offers no downgrade tooling.
@@ -177,7 +177,7 @@ not pre-created.
 4. **Check the merge commit.** Merge through a PR and confirm its CI gate.
    CI boots a packed tarball, while a GitHub source install also runs
    `prepare`. On each supported DSH version, install
-   `github:goodboys-ai/dsh-subscription-hub#<merge-sha>` in an isolated
+   `github:goodboys-ai/dsh-subscriptions#<merge-sha>` in an isolated
    profile and confirm the plugin loads after restart. `scripts/boot-smoke.sh`
    with `PLUGIN_SOURCE` set to that spec and `SMOKE_ALLOW_BUILDS=1` does
    this. The flag adds the README's `allowBuilds` entry to the temp profile,
@@ -207,7 +207,7 @@ not pre-created.
    once more for the new name: publish it manually once (`npm publish
    --access public` from the release checkout), then configure the trusted
    publisher on npmjs.com for package `dsh-subscriptions` + repo
-   `goodboys-ai/dsh-subscription-hub` + workflow `release.yml` + no
+   `goodboys-ai/dsh-subscriptions` + workflow `release.yml` + no
    environment; the CI job takes over from the next tag onward. Note the
    first release under the new name cannot reuse `v0.1.0` — that tag already
    exists for the scoped package — so the release PR bumps `package.json`
