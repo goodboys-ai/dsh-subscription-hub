@@ -43,6 +43,23 @@ peers passes `dsh plugin add` plus boot smoke on both `0.2.0-rc.1` and
 host-injection model and appears with an exact disjunction just the same —
 it is unrelated to range width.
 
+The supported distribution path is `dsh plugin add`; a raw
+`npm install dsh-subscriptions` into a consumer project is not one, and the
+distinction decides whether the interval matches at all. npm's Arborist
+evaluates peer ranges with default semver semantics — no
+`includePrerelease` — so a prerelease host matches only when some
+comparator carries its exact `major.minor.patch` tuple: `0.1.7-rc.x`
+installs because the floor comparator is `>=0.1.7-rc.2`, but
+`0.2.0-rc.2` has no such comparator in the interval and npm aborts with
+`ERESOLVE` (observed with npm 11.8.0 and 12.2.0). pnpm and the
+awesome-dsh-plugins registry prover both evaluate with
+`includePrerelease: true`, matching the plugin manager, so neither rejects
+the install. The npm-only failure is accepted rather than patched with an
+extra `|| 0.2.0-rc.x` disjunct: such a disjunct would have to be re-added
+per RC, and nothing in the supported flow reads npm's verdict. If a future
+distribution channel installs through npm, this paragraph is the trigger
+to revisit.
+
 What "supported" means is unchanged: the set of versions in
 `dsh-versions.txt` that passed the full gate (build, tests, host-export and
 host contract checks, boot smoke, host E2E), which CI still runs per window
