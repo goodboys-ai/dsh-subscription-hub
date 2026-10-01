@@ -5,11 +5,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/goodboys-ai/dsh-subscription-hub.git"
+    "url": "git+https://github.com/goodboys-ai/dsh-subscriptions.git"
   },
-  "homepage": "https://github.com/goodboys-ai/dsh-subscription-hub#readme",
+  "homepage": "https://github.com/goodboys-ai/dsh-subscriptions#readme",
   "bugs": {
-    "url": "https://github.com/goodboys-ai/dsh-subscription-hub/issues"
+    "url": "https://github.com/goodboys-ai/dsh-subscriptions/issues"
   },
   "packageManager": "pnpm@10.33.2",
   "keywords": [

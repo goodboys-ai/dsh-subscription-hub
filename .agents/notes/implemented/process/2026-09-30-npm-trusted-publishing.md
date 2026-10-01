@@ -26,10 +26,12 @@ live in [2026-09-30-package-rename.md](2026-09-30-package-rename.md). The
 trusted-publishing mechanics below are unchanged by the rename; only the
 package name and the one-time bootstrap repeat. `private: true` is removed
 and `"publishConfig": {"access": "public"}` added; the GitHub repo slug
-`goodboys-ai/dsh-subscription-hub` is unchanged. Publishing is OIDC trusted
+`goodboys-ai/dsh-subscription-hub` was unchanged at rename time and became
+`goodboys-ai/dsh-subscriptions` on 2026-10-01 (the old slug redirects
+indefinitely). Publishing is OIDC trusted
 publishing — the workflow mints an id-token, npm verifies it against the
 trusted publisher configured on npmjs.com for repo
-`goodboys-ai/dsh-subscription-hub` + workflow `release.yml` + no environment
+`goodboys-ai/dsh-subscriptions` + workflow `release.yml` + no environment
 — so no token exists to leak or expire. The CI call is `npm publish
 --provenance --access public` (the documented OIDC path), not `pnpm publish`.
 A version containing `-` publishes under the `alpha` dist-tag so `latest`
@@ -39,7 +41,10 @@ which covers reruns and the manual bootstrap: for the scoped name the
 maintainer published `0.1.0-rc.0` to `alpha` by hand, configured the
 trusted publisher on npmjs.com, and CI took over from `v0.1.0` onward; the
 rename repeats that bootstrap once for `dsh-subscriptions` (manual first
-publish, trusted-publisher re-registration, then CI).
+publish, trusted-publisher re-registration, then CI) — completed 2026-10-01
+with the manual `dsh-subscriptions@0.1.0` publish (alpha and latest), the
+trusted publisher registered against the new repo slug, and the scoped
+package deprecated.
 
 Install verification (2026-09-30, against the installed CLI and the npx
 cache for every window version) found `dsh plugin add` DOES accept npm

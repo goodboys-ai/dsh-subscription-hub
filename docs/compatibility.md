@@ -129,10 +129,10 @@ dsh plugin --profile web add @goodboys-ai/dsh-subscription-hub@0.1.0
 
 Releases from the rename onward pin under the new name, e.g.
 `dsh plugin --profile web add dsh-subscriptions@0.1.1`. Any release can also
-be installed from GitHub source (the repo slug is unchanged):
+be installed from GitHub source:
 
 ```sh
-dsh plugin --profile web add github:goodboys-ai/dsh-subscription-hub#v0.1.0
+dsh plugin --profile web add github:goodboys-ai/dsh-subscriptions#v0.1.0
 ```
 
 That tag is the **downgrade path** — DSH itself offers no downgrade tooling.
@@ -177,7 +177,7 @@ not pre-created.
 4. **Check the merge commit.** Merge through a PR and confirm its CI gate.
    CI boots a packed tarball, while a GitHub source install also runs
    `prepare`. On each supported DSH version, install
-   `github:goodboys-ai/dsh-subscription-hub#<merge-sha>` in an isolated
+   `github:goodboys-ai/dsh-subscriptions#<merge-sha>` in an isolated
    profile and confirm the plugin loads after restart. `scripts/boot-smoke.sh`
    with `PLUGIN_SOURCE` set to that spec and `SMOKE_ALLOW_BUILDS=1` does
    this. The flag adds the README's `allowBuilds` entry to the temp profile,
@@ -203,17 +203,22 @@ not pre-created.
    The first publish ever (a `0.1.0-rc.0` under `alpha`) was done manually
    by the maintainer, because npm only lets a trusted publisher be
    configured for a package that already exists; the CI job took over from
-   `v0.1.0` onward. The rename to `dsh-subscriptions` needs this bootstrap
-   once more for the new name: publish it manually once (`npm publish
-   --access public` from the release checkout), then configure the trusted
-   publisher on npmjs.com for package `dsh-subscriptions` + repo
-   `goodboys-ai/dsh-subscription-hub` + workflow `release.yml` + no
-   environment; the CI job takes over from the next tag onward. Note the
+   `v0.1.0` onward. The one-time bootstrap for the new name was completed
+   on 2026-10-01: the maintainer published `dsh-subscriptions@0.1.0`
+   manually (`npm publish --access public --tag alpha` from the release
+   checkout — npm also tagged it `latest` as the first version), registered
+   the trusted publisher on npmjs.com for package `dsh-subscriptions` +
+   repo `goodboys-ai/dsh-subscriptions` + workflow `release.yml` + no
+   environment, and deprecated the scoped package via
+   `npm deprecate @goodboys-ai/dsh-subscription-hub@'*' 'Moved to dsh-subscriptions'`.
+   These steps would only recur if the package name changed again; the CI
+   job takes over from the next tag onward. The published
+   `dsh-subscriptions@0.1.0` tarball's repository metadata still carries
+   the old repo slug (it was published before the repo rename); redirects
+   cover it, and the metadata self-heals from `v0.1.1` onward. Note the
    first release under the new name cannot reuse `v0.1.0` — that tag already
    exists for the scoped package — so the release PR bumps `package.json`
-   to the next version first. After the new name's first publish succeeds,
-   deprecate the scoped package so installs resolve to the new name:
-   `npm deprecate @goodboys-ai/dsh-subscription-hub@'*' 'Moved to dsh-subscriptions'`.
+   to the next version first.
 
    Manual fallback if the workflow is unavailable:
    `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`, adding
