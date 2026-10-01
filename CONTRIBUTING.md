@@ -70,3 +70,15 @@ For visible UI changes, include a screenshot or recording and state what was
 checked. Update the owning documentation or Agent Note when behavior or a
 durable decision changes. Follow the [prose standard](.agents/skills/subscription-hub-prose-standard/SKILL.md)
 for comments, docs, and user-visible text.
+
+A still proves a state (appearance, layout, an A/B difference); a recording
+proves a behavior (a sequence, timing, a transient state). PR-only stills at
+or below 300 KiB each live at
+`docs/assets/pr-<number>/<subject>-<state>[-<theme>].png`, in lowercase
+kebab-case; use `before-after` for a comparison. Documentation images stay
+in the docs directory that owns them and are not added to `screenshots.json`.
+Recordings, GIFs, and larger stills go to a media-only orphan branch named
+`<series>-assets`, never the pull-request branch, and are embedded as
+`https://github.com/<owner>/<repo>/blob/<branch>/<name>?raw=true`. These
+branches are append-only: never replace a published file, delete the branch,
+or force-push it.

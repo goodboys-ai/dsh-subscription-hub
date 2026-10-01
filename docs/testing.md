@@ -24,6 +24,19 @@ Integration is a coverage category, not a separate lane. The other checks
 install a DSH version's packages, and the smoke and end-to-end tests also
 boot a real DSH, so they are separate commands.
 
+Repository checks run once in CI, without a DSH version or dependencies:
+
+- `node scripts/verify-agent-notes.mjs`: checks Agent Note structure and
+  required sections against `.agents/notes/AGENTS.md`.
+- `node scripts/check-compat-docs.mjs`: checks compatibility statements
+  against `dsh-versions.txt`.
+- `node scripts/check-image-budget.mjs`: scans `docs/assets/pr-*/`
+  recursively, caps each bitmap at 300 KiB, and forbids recordings there
+  (`.gif`, `.mp4`, `.webm`, `.mov`). A recording or oversized still goes to
+  an append-only assets branch. Documentation images outside that directory
+  are not policed. `--dir <path>` selects a fixture repository root; exit 0
+  means clean, 1 a finding, and 2 that the check could not run.
+
 ## Unit tests
 
 All specs in `test/` cover the adapter logic: OAuth URL construction, PKCE,

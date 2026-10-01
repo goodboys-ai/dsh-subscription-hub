@@ -26,7 +26,9 @@ jobs:
     #    a slimmed-down port of deepseek-harness's agent-note gates with no
     #    bilingual pairing or archive machinery;
     #  - the compatibility statements (package.json peers, the README sentence,
-    #    and the compatibility table) against dsh-versions.txt.
+    #    and the compatibility table) against dsh-versions.txt;
+    #  - PR evidence bitmap sizes and the recording ban, protecting every
+    #    clone and CI fetch from oversized committed media.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -39,6 +41,7 @@ jobs:
       # never a host, and would return the same verdict on each DSH version.
       # It catches a compatibility statement that drifted from the window.
       - run: node scripts/check-compat-docs.mjs
+      - run: node scripts/check-image-budget.mjs
 
   build-and-test:
     # Per-version API checks: compile and test against each DSH version's
