@@ -122,9 +122,10 @@ Expired, failed-refresh or more-than-five-minute-old readings retain the last re
 
 ### MiniMax subscription usage
 
-Configure `MINIMAX_SUBSCRIPTION_API_KEY` for the global service or
-`MINIMAX_CN_SUBSCRIPTION_API_KEY` for China in DSH credentials. These are
-subscription keys, not `sk-api-*` pay-as-you-go keys. The plugin reads the
+Configure `MINIMAX_API_KEY` for the global service or
+`MINIMAX_CN_API_KEY` for China, using DSH's standard model-key configuration.
+The plugin reuses those credential references; no separate subscription ref is
+required. Quota reads require subscription keys, not `sk-api-*` pay-as-you-go keys. The plugin reads the
 region's `/v1/token_plan/remains` endpoint and displays finite per-model quotas
 with API-provided start/end times. It does not add model routing or OAuth login.
 Unlimited, boosted-above-100% and unsupported quotas are omitted; if none remain,

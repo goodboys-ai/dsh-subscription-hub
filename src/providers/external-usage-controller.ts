@@ -16,8 +16,8 @@ type ResolveCredential = (name: string) => Promise<{ value: string } | undefined
 const DEFAULT_REFS: Record<ExternalUsageSource, string> = {
   'opencode-go': 'OPENCODE_GO_API_KEY',
   'kimi-code': 'KIMI_CODING_API_KEY',
-  'minimax': 'MINIMAX_SUBSCRIPTION_API_KEY',
-  'minimax-cn': 'MINIMAX_CN_SUBSCRIPTION_API_KEY',
+  'minimax': 'MINIMAX_API_KEY',
+  'minimax-cn': 'MINIMAX_CN_API_KEY',
 }
 
 export class ExternalUsageController {

@@ -56,8 +56,8 @@ test('Kimi Code usage sends the resolved key to the Kimi usages endpoint', async
 test('MiniMax regions resolve subscription refs and forward cancellation', async () => {
   const signal = new AbortController().signal
   for (const [source, ref, domain] of [
-    ['minimax', 'MINIMAX_SUBSCRIPTION_API_KEY', 'io'],
-    ['minimax-cn', 'MINIMAX_CN_SUBSCRIPTION_API_KEY', 'cn'],
+    ['minimax', 'MINIMAX_API_KEY', 'io'],
+    ['minimax-cn', 'MINIMAX_CN_API_KEY', 'cn'],
   ] as const) {
     const http = (async (url: string | URL | Request, init?: RequestInit) => {
       assert.equal(String(url), `https://www.minimax.${domain}/v1/token_plan/remains`)

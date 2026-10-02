@@ -13,8 +13,8 @@ type Translate = SubscriptionsSectionInjected['t']
 const SOURCES: readonly { id: Source; name: string; ref: string }[] = [
   { id: 'opencode-go', name: 'OpenCode Go', ref: 'OPENCODE_GO_API_KEY' },
   { id: 'kimi-code', name: 'Kimi Code', ref: 'KIMI_CODING_API_KEY' },
-  { id: 'minimax', name: 'MiniMax', ref: 'MINIMAX_SUBSCRIPTION_API_KEY' },
-  { id: 'minimax-cn', name: 'MiniMax CN', ref: 'MINIMAX_CN_SUBSCRIPTION_API_KEY' },
+  { id: 'minimax', name: 'MiniMax', ref: 'MINIMAX_API_KEY' },
+  { id: 'minimax-cn', name: 'MiniMax CN', ref: 'MINIMAX_CN_API_KEY' },
 ]
 
 type Status = Record<Source, { configured: boolean }>

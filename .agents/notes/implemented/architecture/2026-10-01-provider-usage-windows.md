@@ -26,8 +26,10 @@ period. Only explicit seven-day limits or legacy weekly pools assert a fixed
 window. Five-hour rolling semantics remain unverified; no fixed start is
 invented. New plans need not expose weekly pools.
 
-MiniMax adds global and China usage-only sources with dedicated subscription
-credential references. Finite quotas preserve model scope and API millisecond
+MiniMax adds global and China usage-only sources using DSH's conventional
+`MINIMAX_API_KEY` and `MINIMAX_CN_API_KEY` credential references. Configuring a
+subscription key in the host model settings therefore requires no second key.
+Finite quotas preserve model scope and API millisecond
 bounds. Explicit remaining percentages win; absent percentages use the official
 CLI's legacy remaining-count convention. Unlimited and boosted-above-100% pools
 are omitted rather than forced into finite bars. HTTP and business errors fail
