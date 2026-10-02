@@ -16,7 +16,7 @@ provider. That gap belongs to the manual pre-release canary.
 | Boot smoke test | `bash scripts/boot-smoke.sh` | CI, every version | the packed tarball installs, mounts, serves, and answers logged-out RPCs |
 | Host end-to-end test (host E2E) | `bash scripts/host-e2e.sh` | CI, every version | the plugin works inside a signed-in `dsh web`, driven through Chrome |
 | Nightly | `.github/workflows/nightly.yml` | schedule | mutation score, shuffled order, newest published DSH |
-| Canary | manual | before a release | real providers |
+| Canary | manual | optional, not a release gate | real providers |
 
 Unit and integration tests share one command: `pnpm test` compiles `test/`
 and runs every spec, including the virtual-provider integration specs.
@@ -459,13 +459,13 @@ dropped Codex text deltas. Each ended the run with a product failure.
 ## Pre-release canary (manual — not a test layer)
 
 Automated tests never touch production provider servers, so provider-side
-drift has no automated coverage by design. The backstop is manual: before
-tagging a release, use an isolated profile on each supported DSH version,
-log in to each subscription provider, read usage where available, and run
-one model request per provider. Also check the usage-only sources and any
-changed provider tools. The README's
+drift has no automated coverage by design. The manual canary is optional
+and does not gate stable releases. When running it, use an isolated profile
+on each supported DSH version, log in to each subscription provider, read
+usage where available, and run one model request per provider. Also check
+the usage-only sources and any changed provider tools. The README's
 [verification section](../README.md#verification-and-limits) records live
-checks and remaining gaps.
+checks and remaining gaps; release notes disclose unverified live behavior.
 
 ## What "tested" means in the compatibility table
 

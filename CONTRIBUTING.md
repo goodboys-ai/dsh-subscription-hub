@@ -63,8 +63,9 @@ test that is, and add a row to the bug replay table in
 Add or update offline adapter and virtual-provider tests for changed request
 or response behavior. These tests check the plugin's side of a recorded
 provider contract; they do not prove that a provider still accepts it. The
-manual pre-release canary in [testing.md](docs/testing.md) covers live
-provider behavior in an isolated profile.
+optional manual canary in [testing.md](docs/testing.md) covers live provider
+behavior in an isolated profile; it does not gate stable releases. Disclose
+remaining live-provider gaps in the release notes.
 
 For visible UI changes, include a screenshot or recording and state what was
 checked. Update the owning documentation or Agent Note when behavior or a
