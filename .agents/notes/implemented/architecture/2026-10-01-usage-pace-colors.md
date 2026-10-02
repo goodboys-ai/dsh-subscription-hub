@@ -80,8 +80,8 @@ integration, not live provider interval semantics. No new fixed-duration
 assumption is enabled without provider evidence.
 
 Both locales render in server-side component tests; actual host screenshots
-cover English/light at the driver's default viewport. Chinese, dark-theme and
-narrow-layout host screenshots remain a verification limit.
+cover English in light and dark themes at the driver's default viewport.
+Chinese-language and narrow-layout host screenshots remain a verification limit.
 
 ## Consequences
 

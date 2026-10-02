@@ -29,8 +29,11 @@ invented. New plans need not expose weekly pools.
 MiniMax adds global and China usage-only sources using DSH's conventional
 `MINIMAX_API_KEY` and `MINIMAX_CN_API_KEY` credential references. Configuring a
 subscription key in the host model settings therefore requires no second key.
-Finite quotas preserve model scope and API millisecond
-bounds. Explicit remaining percentages win; absent percentages use the official
+Usage-only integrations reuse the host's credential references rather than
+introducing a parallel configuration. Key presence means configured, not that
+subscription quota is available; key type and the quota response determine
+support. Finite quotas preserve model scope and API millisecond bounds.
+Explicit remaining percentages win; absent percentages use the official
 CLI's legacy remaining-count convention. Unlimited and boosted-above-100% pools
 are omitted rather than forced into finite bars. HTTP and business errors fail
 without exposing keys. Pay-as-you-go keys are not subscription credentials.
@@ -61,6 +64,11 @@ fills nearly disappearing into the track. Stale labels retain the caveat.
 
 **Infer every period from its label.** Rejected because monthly calendar bounds
 are ambiguous and Kimi rolling semantics are not established by a label.
+
+**Separate subscription credential references.** Rejected because DSH model
+settings save keys under the conventional provider references; inventing
+`*_SUBSCRIPTION_API_KEY` names leaves already configured subscriptions
+undetected and requires users to configure the same key twice.
 
 **Use ordinary MiniMax inference keys.** Rejected because the official client
 routes pay-as-you-go keys to balance queries, not subscription quota endpoints.
