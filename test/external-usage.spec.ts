@@ -16,8 +16,8 @@ test('OpenCode Go usage maps all three windows and sends the key only upstream',
     supported: true,
     plan: 'OpenCode Go',
     windows: [
-      { kind: 'session', usedPercent: 25, resetsAt: Date.parse('2026-09-28T08:00:00Z') },
-      { kind: 'weekly', usedPercent: 50, resetsAt: Date.parse('2026-10-01T00:00:00Z') },
+      { kind: 'session', usedPercent: 25, fixedWindow: true, windowDurationMs: 18_000_000, resetsAt: Date.parse('2026-09-28T08:00:00Z') },
+      { kind: 'weekly', usedPercent: 50, fixedWindow: true, windowDurationMs: 604_800_000, resetsAt: Date.parse('2026-10-01T00:00:00Z') },
       { kind: 'other', scope: 'Monthly', usedPercent: 75, resetsAt: Date.parse('2026-10-28T00:00:00Z') },
     ],
   })
@@ -56,6 +56,22 @@ test('Kimi Code usage maps present ratio pools and tolerates absent windows', as
       { kind: 'other', scope: 'Monthly', usedPercent: 42, resetsAt: Date.parse('2026-10-17T00:00:00Z') },
     ],
   })
+})
+
+test('Kimi official CLI shape preserves summary uncertainty and explicit weekly duration', async () => {
+  const http = (async () => Response.json({
+    usage: { limit: '100', remaining: '60', reset_at: '2026-10-01T00:00:00Z' },
+    limits: [
+      { window: { duration: 300, timeUnit: 'MINUTE' }, detail: { limit: 100, used: 25 } },
+      { window: { duration: 7, timeUnit: 'DAY' }, detail: { limit: 100, remaining: 50 } },
+    ],
+  })) as typeof fetch
+  const usage = await fetchKimiCodeUsage('key', http)
+  assert.deepEqual(usage.windows, [
+    { kind: 'other', usedPercent: 40, resetsAt: Date.parse('2026-10-01T00:00:00Z') },
+    { kind: 'session', usedPercent: 25, windowDurationMs: 18_000_000 },
+    { kind: 'weekly', usedPercent: 50, windowDurationMs: 604_800_000, fixedWindow: true },
+  ])
 })
 
 test('Kimi Code HTTP errors do not disclose the key', async () => {

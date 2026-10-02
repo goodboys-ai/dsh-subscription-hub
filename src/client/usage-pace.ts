@@ -49,15 +49,15 @@ export function elapsedPercent(window: UsageWindow, now = Date.now()): number | 
   return Math.min(100, Math.max(0, (now - start) / (end - start) * 100))
 }
 export function usageColorState(used: number, elapsed: number | undefined, preset: UsageColorPreset, fresh: boolean): UsageColorState {
-  if (!fresh || !validUsage(used)) return 'neutral'
+  if (!validUsage(used)) return 'neutral'
   if (used >= 90) return 'red'
-  if (preset === 'remaining') return 'green'
-  if (elapsed === undefined) return 'neutral'
+  // Missing pace or stale observations retain the last reported absolute color.
+  if (!fresh || preset === 'remaining' || elapsed === undefined) return 'green'
   return used - elapsed >= (preset === 'relaxed' ? 15 : 10) ? 'yellow' : 'green'
 }
 export function usageBarColor(used: number, elapsed?: number, preset: UsageColorPreset = 'standard', fresh = true): string {
   const state = usageColorState(used, elapsed, preset, fresh)
   return state === 'red' ? 'var(--dsw-alias-state-error-primary)'
     : state === 'yellow' ? 'var(--dsw-alias-state-warn-label)'
-      : state === 'green' ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-dimmed)'
+      : 'var(--dsw-alias-state-success-primary)'
 }

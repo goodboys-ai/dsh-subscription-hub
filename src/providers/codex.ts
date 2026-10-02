@@ -336,7 +336,10 @@ function codexUsageWindow(value: unknown, fallbackKind: UsageWindow['kind']): Us
   return {
     kind: codexWindowKind(window, fallbackKind),
     ...typeof window.limit_window_seconds === 'number' && Number.isFinite(window.limit_window_seconds)
-      && window.limit_window_seconds > 0 ? { windowDurationMs: window.limit_window_seconds * 1000 } : {},
+      && window.limit_window_seconds > 0 ? {
+        // wham reports the duration and reset of this same quota window.
+        windowDurationMs: window.limit_window_seconds * 1000, fixedWindow: true,
+      } : {},
     usedPercent: window.used_percent,
     ...resetsAt === undefined ? {} : { resetsAt },
   }
