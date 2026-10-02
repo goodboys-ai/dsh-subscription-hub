@@ -17,26 +17,26 @@ use the same preset. Persistence validates values, falls back to Standard and
 synchronizes same-origin tabs. Display preferences never change routing or
 enforcement.
 
-Validity and freshness precede colors. Invalid percentages, failed refreshes,
-observations older than five minutes and readings whose known reset has passed
-are neutral. Cached numbers remain visible with an accessible stale explanation.
+Validity and freshness precede pace warnings. Invalid percentages show no fill.
+Failed refreshes, observations older than five minutes and expired readings
+retain absolute green/red colors with an accessible stale explanation. Unknown
+pace also retains green/red: gray fills were barely visible in dark mode.
 The pool cache preserves the original observation timestamp and explicitly
 reports stale fallback after failures; successful RPC receipt is not sufficient
 evidence of freshness.
 
-Fresh valid usage at least 90% is red in every preset. Below that,
-remaining-only is green. Pace presets require reliable time progress: yellow
-when unrounded used minus elapsed is at least the preset allowance, otherwise
-green. Unknown timing is neutral in pace presets, not expired by itself. Compare
-unrounded values and round only labels.
+Valid reported usage at least 90% is red in every preset. Below that, the
+absolute fallback is green. Pace presets require fresh readings and reliable
+time progress: yellow when unrounded used minus elapsed is at least the preset
+allowance, otherwise green. Compare unrounded values and round only labels.
 
 The marker uses explicit valid start/end intervals, currently supplied by Grok
 periods and Cursor billing cycles. A duration enables inferred starts only with
-explicit provider verification (`fixedWindow`). No adapter currently asserts
-this flag: Codex duration metadata remains available but is not sufficient
-evidence by itself. Claude, Kimi, OpenCode and other reset-only windows do not
-acquire invented five-hour/seven-day starts. Genuine rolling quotas have no
-linear pace marker.
+provider-specific metadata (`fixedWindow`). Codex uses the duration reported
+alongside its reset. Claude recognizes its five-hour session and seven-day
+weekly buckets in both response shapes. Unknown kinds and reset-only windows
+without a known duration do not acquire invented starts. Genuine sliding quotas
+have no linear pace marker.
 
 Settings reuse the neighboring native select, label, spacing, hint and theme
 tokens. Short preset-specific hints explain yellow and red; meter tooltips
@@ -80,15 +80,15 @@ integration, not live provider interval semantics. No new fixed-duration
 assumption is enabled without provider evidence.
 
 Both locales render in server-side component tests; actual host screenshots
-cover English/light at the driver's default viewport. Chinese, dark-theme and
-narrow-layout host screenshots remain a verification limit.
+cover English in light and dark themes at the driver's default viewport.
+Chinese-language and narrow-layout host screenshots remain a verification limit.
 
 ## Consequences
 
 Yellow describes pace and red describes little remaining quota; neither predicts
-interruption. Freshness handling prevents cached numbers from becoming
-reassuring solely as time advances. Conservative interval handling means some
-providers have neutral pace bars and no marker until reliable timing is
-available. One additional dropdown, localized labels and observation metadata
+interruption. Freshness handling prevents cached numbers from gaining pace
+warnings solely as time advances; accessible stale labels qualify their retained
+absolute colors. Unknown intervals keep visible green/red bars without markers.
+One additional dropdown, localized labels and observation metadata
 buy clearer semantics without provider-specific tuning. Revisit the defaults
 only if real usage shows frequent unactionable or late yellow warnings.

@@ -7,6 +7,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { elapsedPercent, usageColorState } from '../src/client/usage-pace.js'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -77,8 +78,8 @@ test('fetchCodexUsage maps windows, plan, and reset timestamps', async () => {
     supported: true,
     plan: 'plus',
     windows: [
-      { kind: 'session', usedPercent: 27, resetsAt: 1_782_770_922_000, windowDurationMs: 18_000_000 },
-      { kind: 'weekly', usedPercent: 4, resetsAt: 1_783_357_722_000, windowDurationMs: 604_800_000 },
+      { kind: 'session', usedPercent: 27, resetsAt: 1_782_770_922_000, windowDurationMs: 18_000_000, fixedWindow: true },
+      { kind: 'weekly', usedPercent: 4, resetsAt: 1_783_357_722_000, windowDurationMs: 604_800_000, fixedWindow: true },
     ],
   })
   assert.equal(requests.length, 1)
@@ -96,7 +97,7 @@ test('fetchCodexUsage classifies a weekly primary window by duration', async () 
   })
   const usage = await fetchCodexUsage(codexSession, fetchFn)
   assert.deepEqual(usage.windows, [
-    { kind: 'weekly', usedPercent: 39, resetsAt: 1_783_357_722_000, windowDurationMs: 604_800_000 },
+    { kind: 'weekly', usedPercent: 39, resetsAt: 1_783_357_722_000, windowDurationMs: 604_800_000, fixedWindow: true },
   ])
 })
 
@@ -109,8 +110,8 @@ test('fetchCodexUsage maps unrecognized durations to other, not a fixed label', 
   })
   const usage = await fetchCodexUsage(codexSession, fetchFn)
   assert.deepEqual(usage.windows, [
-    { kind: 'session', usedPercent: 10, windowDurationMs: 18_000_000 },
-    { kind: 'other', usedPercent: 5, windowDurationMs: 3_600_000 },
+    { kind: 'session', usedPercent: 10, windowDurationMs: 18_000_000, fixedWindow: true },
+    { kind: 'other', usedPercent: 5, windowDurationMs: 3_600_000, fixedWindow: true },
   ])
 })
 
@@ -143,6 +144,22 @@ test('fetchCodexUsage falls back to reset_after_seconds and tolerates missing wi
   assert.ok(window.resetsAt !== undefined && window.resetsAt >= before + 100_000)
 })
 
+test('Claude and Codex adapter windows enable pace, not just duration labels', async () => {
+  const now = Date.now()
+  const reset = now + 4 * 60 * 60_000
+  const codex = await fetchCodexUsage(codexSession, fakeFetch({ rate_limit: {
+    primary_window: { used_percent: 40, limit_window_seconds: 18000, reset_at: reset / 1000 },
+  } }).fetchFn)
+  const claude = await fetchClaudeUsage(claudeSession, fakeFetch({
+    five_hour: { utilization: 40, resets_at: new Date(reset).toISOString() },
+  }).fetchFn)
+  for (const usage of [codex, claude]) {
+    const window = usage.windows![0]!
+    assert.equal(elapsedPercent(window, now), 20)
+    assert.equal(usageColorState(window.usedPercent, elapsedPercent(window, now), 'standard', true), 'yellow')
+  }
+})
+
 test('fetchCodexUsage: non-2xx response throws', async () => {
   const { fetchFn } = fakeFetch({ error: 'nope' }, 500)
   await assert.rejects(fetchCodexUsage(codexSession, fetchFn), /codex usage/)
@@ -159,9 +176,9 @@ test('fetchClaudeUsage maps legacy buckets and skips null ones', async () => {
   assert.deepEqual(usage, {
     supported: true,
     windows: [
-      { kind: 'session', usedPercent: 6, resetsAt: Date.parse('2026-04-08T18:59:59Z') },
-      { kind: 'weekly', usedPercent: 35, resetsAt: Date.parse('2026-04-14T16:59:59Z') },
-      { kind: 'weekly', scope: 'Sonnet', usedPercent: 21 },
+      { kind: 'session', usedPercent: 6, windowDurationMs: 18_000_000, fixedWindow: true, resetsAt: Date.parse('2026-04-08T18:59:59Z') },
+      { kind: 'weekly', usedPercent: 35, windowDurationMs: 604_800_000, fixedWindow: true, resetsAt: Date.parse('2026-04-14T16:59:59Z') },
+      { kind: 'weekly', scope: 'Sonnet', usedPercent: 21, windowDurationMs: 604_800_000, fixedWindow: true },
     ],
   })
   assert.equal(requests[0].headers['anthropic-beta'], 'oauth-2025-04-20')
@@ -193,9 +210,9 @@ test('fetchClaudeUsage prefers the modern limits array when present', async () =
   })
   const usage = await fetchClaudeUsage(claudeSession, fetchFn)
   assert.deepEqual(usage.windows, [
-    { kind: 'session', usedPercent: 12, resetsAt: Date.parse('2026-04-08T18:59:59Z') },
-    { kind: 'weekly', usedPercent: 40, resetsAt: Date.parse('2026-04-14T16:59:59Z') },
-    { kind: 'weekly', scope: 'Opus', usedPercent: 7, resetsAt: Date.parse('2026-04-14T16:59:59Z') },
+    { kind: 'session', usedPercent: 12, windowDurationMs: 18_000_000, fixedWindow: true, resetsAt: Date.parse('2026-04-08T18:59:59Z') },
+    { kind: 'weekly', usedPercent: 40, windowDurationMs: 604_800_000, fixedWindow: true, resetsAt: Date.parse('2026-04-14T16:59:59Z') },
+    { kind: 'weekly', scope: 'Opus', usedPercent: 7, windowDurationMs: 604_800_000, fixedWindow: true, resetsAt: Date.parse('2026-04-14T16:59:59Z') },
   ])
 })
 

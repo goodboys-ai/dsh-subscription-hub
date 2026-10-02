@@ -114,11 +114,25 @@ UI have been retired; an old plugin proxy config file is ignored.
 - **Relaxed**: yellow at a lead of at least 15 points.
 - **Remaining quota only**: no yellow pace warnings.
 
-Every preset shows fresh usage of 90% or more in red, before considering pace. For example, 40% used after 25% of a window is a 15-point lead, not a consumption forecast. Preferences apply to all meters, survive reloads and synchronize across tabs of the same origin. They change display only, never account routing or quota enforcement.
+Every preset shows reported usage of 90% or more in red, before considering pace. For example, 40% used after 25% of a window is a 15-point lead, not a consumption forecast. Preferences apply to all meters, survive reloads and synchronize across tabs of the same origin. They change display only, never account routing or quota enforcement.
 
-A vertical marker shows elapsed time only for an explicit valid start/end interval or a provider-verified fixed duration. A session/weekly label alone does not establish a fixed window; rolling or unknown intervals have no marker. Below 90%, unknown timing is neutral in pace presets and green in remaining-only mode.
+A vertical marker shows elapsed time only for an explicit valid start/end interval or a provider-verified fixed duration. A session/weekly label alone does not establish a fixed window; rolling or unknown intervals have no marker. Claude's recognized five-hour/seven-day buckets and Codex's reported quota durations supply fixed-window metadata. Unknown timing falls back to green below 90%, without a marker or yellow warning.
 
-Invalid, expired, failed-refresh or more-than-five-minute-old readings are neutral. Cached numbers remain visible, with an accessible stale label; refresh to confirm them. Tooltips explain remaining quota, time progress and reset countdown where available. See the [decision record](.agents/notes/implemented/architecture/2026-10-01-usage-pace-colors.md) for rationale and verification limits.
+Expired, failed-refresh or more-than-five-minute-old readings retain the last reported green/red color, without pace warnings or markers. Cached numbers remain visible, with an accessible stale label; refresh to confirm them. Invalid percentages show an unavailable state without a fabricated fill. Tooltips explain remaining quota, time progress and reset countdown where available. See the [decision record](.agents/notes/implemented/architecture/2026-10-01-usage-pace-colors.md) for rationale and verification limits.
+
+### MiniMax subscription usage
+
+Configure `MINIMAX_API_KEY` for the global service or
+`MINIMAX_CN_API_KEY` for China, using DSH's standard model-key configuration.
+The plugin reuses those credential references; no separate subscription ref is
+required. Quota reads require subscription keys, not `sk-api-*` pay-as-you-go keys. The plugin reads the
+region's `/v1/token_plan/remains` endpoint and displays finite per-model quotas
+with API-provided start/end times. It does not add model routing or OAuth login.
+Unlimited, boosted-above-100% and unsupported quotas are omitted; if none remain,
+the card reports unavailable rather than inventing a percentage. Explicit
+remaining percentages take priority; older responses follow the official CLI's
+remaining-count compatibility convention. No live-account response was used in
+verification.
 
 ## Development
 

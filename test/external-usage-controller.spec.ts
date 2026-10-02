@@ -11,6 +11,8 @@ test('usage-only status reports configured refs without returning their values',
   assert.deepEqual(await controller.status(), {
     'opencode-go': { configured: true },
     'kimi-code': { configured: false },
+    minimax: { configured: false },
+    'minimax-cn': { configured: false },
   })
   assert.ok(!JSON.stringify(await controller.status()).includes('go-secret'))
   await assert.rejects(() => controller.usage('kimi-code'), /not configured/)
@@ -45,10 +47,30 @@ test('Kimi Code usage sends the resolved key to the Kimi usages endpoint', async
     supported: true,
     plan: 'Kimi Code',
     windows: [
-      { kind: 'weekly', usedPercent: 25, resetsAt: Date.parse('2026-10-01T00:00:00Z') },
+      { kind: 'weekly', usedPercent: 25, fixedWindow: true, windowDurationMs: 604_800_000, resetsAt: Date.parse('2026-10-01T00:00:00Z') },
     ],
   })
   assert.equal(calls, 1)
+})
+
+test('MiniMax regions resolve subscription refs and forward cancellation', async () => {
+  const signal = new AbortController().signal
+  for (const [source, ref, domain] of [
+    ['minimax', 'MINIMAX_API_KEY', 'io'],
+    ['minimax-cn', 'MINIMAX_CN_API_KEY', 'cn'],
+  ] as const) {
+    const http = (async (url: string | URL | Request, init?: RequestInit) => {
+      assert.equal(String(url), `https://www.minimax.${domain}/v1/token_plan/remains`)
+      assert.equal(init?.signal, signal)
+      assert.equal((init?.headers as Record<string, string>).authorization, 'Bearer secret')
+      return Response.json({ model_remains: [{ model_name: 'M', current_interval_total_count: 100,
+        current_interval_usage_count: 25 }] })
+    }) as typeof fetch
+    const controller = new ExternalUsageController(async name => name === ref ? { value: 'secret' } : undefined, http)
+    assert.equal((await controller.status())[source].configured, true)
+    assert.ok(!JSON.stringify(await controller.status()).includes('secret'))
+    assert.equal((await controller.usage(source, signal)).windows![0]!.usedPercent, 75)
+  }
 })
 
 test('usage-only keys are resolved on every read so DSH credential changes take effect', async () => {

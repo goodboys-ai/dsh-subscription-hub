@@ -42,10 +42,10 @@ test('three presets compare unrounded points; exhaustion takes precedence', () =
   for (const preset of ['standard', 'relaxed', 'remaining'] as const) {
     assert.equal(color(90, 95, preset), 'red')
     assert.equal(color(95, undefined, preset), 'red')
-    assert.equal(usageColorState(95, 0, preset, false), 'neutral')
+    assert.equal(usageColorState(95, 0, preset, false), 'red')
     for (const invalid of [NaN, Infinity, -1, 101]) assert.equal(color(invalid, 0, preset), 'neutral')
   }
-  assert.equal(color(40, undefined), 'neutral')
+  assert.equal(color(40, undefined), 'green')
   assert.equal(color(40, undefined, 'remaining'), 'green')
 })
 
@@ -99,10 +99,10 @@ test('localized meter labels distinguish fresh, unknown and stale readings', () 
     assert.ok(html.includes(t('usageMeterReset', { duration: t('usageUnitMinutes', { count: 2 }) })), html)
     const stale = renderToStaticMarkup(createElement(UsageMeter, { ...props, stale: true }))
     assert.doesNotMatch(stale, /data-usage-time-marker/)
-    assert.match(stale, /data-usage-color="neutral"/)
+    assert.match(stale, /data-usage-color="green"/)
     const noTime = renderToStaticMarkup(createElement(UsageMeter, { t, observedAt: realNow, window: { kind: 'other', usedPercent: 80 } }))
     assert.doesNotMatch(noTime, /data-usage-time-marker/)
-    assert.match(noTime, /data-usage-color="neutral"/)
+    assert.match(noTime, /data-usage-color="green"/)
     // A singular unit is not pluralized.
     const oneMinute = renderToStaticMarkup(createElement(UsageMeter, { t, observedAt: realNow, window: {
       kind: 'session' as const, usedPercent: 10, startsAt: realNow - 100_000, resetsAt: realNow + 59_000,

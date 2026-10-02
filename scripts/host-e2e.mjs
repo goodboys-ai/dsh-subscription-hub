@@ -435,7 +435,7 @@ async function drive(cdp, page, evidence) {
   console.log(`ok: usage pill ${CODEX_PILL} renders inside ${statsRow}`)
 
   // Product: the dialog lists every source with its own percentage.
-  if (!await clickLabel(cdp, [CODEX_PILL])) throw new HarnessFailure('the usage pill could not be clicked')
+  if (!await cdp.evaluate(`(() => { const button = [...document.querySelectorAll('[data-composer-stats] button[aria-haspopup="dialog"]')].find(b => b.getAttribute('aria-label')?.includes('Codex ')); if (!button) return false; button.click(); return true })()`)) throw new HarnessFailure('the usage pill could not be clicked')
   if (!await waitFor(cdp, '(() => document.querySelector(\'[role="dialog"]\') !== null)()', 10_000)) {
     throw new ProductFailure('the usage dialog did not open')
   }
@@ -460,6 +460,15 @@ async function drive(cdp, page, evidence) {
   if (wrong.length > 0) {
     throw new ProductFailure(`usage dialog does not match the fixture:\n  ${wrong.join('\n  ')}\n  sections: ${JSON.stringify(sections).slice(0, 2000)}`)
   }
+  const paceMissing = await cdp.evaluate(`(() => {
+    const sections = [...document.querySelectorAll('[role="dialog"] section')]
+    return ['Codex', 'Claude', 'OpenCode Go'].filter(name => {
+      const section = sections.find(s => s.textContent.includes(name))
+      return !section?.querySelector('[data-usage-time-marker]')
+    })
+  })()`)
+  if (paceMissing.length) throw new ProductFailure(`fixed-window time markers missing: ${paceMissing.join(', ')}`)
+  console.log('ok: Codex and Claude fixed-window time markers render')
   console.log('ok: usage dialog lists every source with its fixture percentage')
   await captureNamedScreenshot(cdp, 'usage-dialog')
 
@@ -691,7 +700,7 @@ async function checkDialogSurface(cdp, evidence) {
       if (pill.pillBackground === null) {
         throw new ProductFailure(`the usage pill is not in the stats row in the ${theme} theme`)
       }
-      if (!await clickLabel(cdp, [CODEX_PILL])) {
+      if (!await cdp.evaluate(`(() => { const button = [...document.querySelectorAll('[data-composer-stats] button[aria-haspopup="dialog"]')].find(b => b.getAttribute('aria-label')?.includes('Codex ')); if (!button) return false; button.click(); return true })()`)) {
         throw new HarnessFailure(`the usage pill could not be clicked in the ${theme} theme`)
       }
       if (!await waitFor(cdp, `(() => document.querySelector(${JSON.stringify(USAGE_DIALOG)}) !== null)()`, 10_000)) {

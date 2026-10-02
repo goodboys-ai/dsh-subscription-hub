@@ -101,7 +101,7 @@ export function pillAccountOf(d: ProviderUsageDisplay): AccountUsageDisplay {
 }
 
 /** Brand display names (short form for the compact badge). */
-export type BadgeProvider = SubscriptionProvider | 'cursor-subscription' | 'opencode-go' | 'kimi-coding'
+export type BadgeProvider = SubscriptionProvider | 'cursor-subscription' | 'opencode-go' | 'kimi-coding' | 'minimax' | 'minimax-cn'
 
 const PROVIDER_NAMES: Record<BadgeProvider, string> = {
   codex: 'Codex',
@@ -112,6 +112,8 @@ const PROVIDER_NAMES: Record<BadgeProvider, string> = {
   'cursor-subscription': 'Cursor',
   'opencode-go': 'OpenCode Go',
   'kimi-coding': 'Kimi Code',
+  'minimax': 'MiniMax',
+  'minimax-cn': 'MiniMax CN',
 }
 
 export interface UsageRosterEntry { provider: BadgeProvider; account: AccountStatus }
@@ -164,7 +166,7 @@ export async function loadBadgeRoster(rpc: ConnectionHandle['rpc']): Promise<{
   const [subscriptions, cursor, external] = await Promise.allSettled([
     callSubscriptionsAuth<{ providers: Record<SubscriptionProvider, ProviderStatus> }>(rpc, 'status', {}),
     callSubscriptionsAuth<{ authenticated: boolean }>(rpc, 'cursorStatus', {}),
-    callSubscriptionsAuth<Record<'opencode-go' | 'kimi-code', { configured: boolean }>>(rpc, 'externalStatus', {}),
+    callSubscriptionsAuth<Record<'opencode-go' | 'kimi-code' | 'minimax' | 'minimax-cn', { configured: boolean }>>(rpc, 'externalStatus', {}),
   ])
   const roster: UsageRosterEntry[] = []
   const refreshed = new Set<BadgeProvider>()
@@ -182,7 +184,7 @@ export async function loadBadgeRoster(rpc: ConnectionHandle['rpc']): Promise<{
   }
   if (external.status === 'fulfilled') {
     for (const [source, provider] of [
-      ['opencode-go', 'opencode-go'], ['kimi-code', 'kimi-coding'],
+      ['opencode-go', 'opencode-go'], ['kimi-code', 'kimi-coding'], ['minimax', 'minimax'], ['minimax-cn', 'minimax-cn'],
     ] as const) {
       refreshed.add(provider)
       if (external.value[source]?.configured) roster.push({
@@ -195,7 +197,7 @@ export async function loadBadgeRoster(rpc: ConnectionHandle['rpc']): Promise<{
 
 export async function usageOf(rpc: ConnectionHandle['rpc'], { provider, account }: UsageRosterEntry): Promise<ProviderUsage> {
   if (provider === 'cursor-subscription') return callSubscriptionsAuth(rpc, 'cursorUsage', {})
-  if (provider === 'opencode-go' || provider === 'kimi-coding') {
+  if (provider === 'opencode-go' || provider === 'kimi-coding' || provider === 'minimax' || provider === 'minimax-cn') {
     return callSubscriptionsAuth(rpc, 'externalUsage', { source: provider === 'kimi-coding' ? 'kimi-code' : provider })
   }
   return callSubscriptionsAuth(rpc, 'usage', { provider, account: account.key })

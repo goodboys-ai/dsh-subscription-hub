@@ -4,6 +4,23 @@ import type { ProviderUsage, UsageWindow } from './common.js'
 
 type HttpFetch = typeof fetch
 
+function numeric(value: unknown): number | undefined {
+  const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
+  return typeof n === 'number' && Number.isFinite(n) ? n : undefined
+}
+
+function kimiReset(value: Record<string, unknown>): number | undefined {
+  for (const key of ['reset_at', 'resetAt', 'reset_time', 'resetTime']) {
+    const reset = resetTime(value[key])
+    if (reset !== undefined) return reset
+  }
+  for (const key of ['reset_in', 'resetIn', 'ttl', 'window']) {
+    const seconds = numeric(value[key])
+    if (seconds !== undefined && seconds > 0) return Date.now() + seconds * 1000
+  }
+  return undefined
+}
+
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -55,6 +72,9 @@ export async function fetchOpenCodeGoUsage(
       kind,
       ...(scope === undefined ? {} : { scope }),
       usedPercent,
+      // Go's rolling counter is first-use anchored, not per-request sliding.
+      ...(field === 'rolling' ? { fixedWindow: true, windowDurationMs: 18_000_000 }
+        : field === 'weekly' ? { fixedWindow: true, windowDurationMs: 604_800_000 } : {}),
       ...(resetsAt === undefined ? {} : { resetsAt }),
     })
   }
@@ -62,7 +82,7 @@ export async function fetchOpenCodeGoUsage(
   return { supported: true, windows, plan: 'OpenCode Go' }
 }
 
-/** Read the Kimi Code plan windows using the same API as the Kimi Code CLI. */
+/** Read official CLI count windows and retain compatibility with older ratio pools. */
 export async function fetchKimiCodeUsage(
   apiKey: string,
   http: HttpFetch = fetch,
@@ -70,8 +90,43 @@ export async function fetchKimiCodeUsage(
 ): Promise<ProviderUsage> {
   const body = record(await getUsage('https://api.kimi.com/coding/v1/usages', apiKey, http, signal))
   if (body === undefined) throw new Error('Kimi Code usage response is not an object')
+  const modern: UsageWindow[] = []
+  const rows = [
+    ...(record(body.usage) ? [{ detail: body.usage }] : []),
+    ...(Array.isArray(body.limits) ? body.limits : []),
+  ]
+  for (const raw of rows) {
+    const item = record(raw)
+    if (!item) continue
+    const detail = record(item.detail) ?? item
+    const limit = numeric(detail.limit)
+    const used = numeric(detail.used) ?? (limit !== undefined && numeric(detail.remaining) !== undefined
+      ? limit - numeric(detail.remaining)! : undefined)
+    if (limit === undefined || limit <= 0 || used === undefined) continue
+    const usedPercent = percent(used / limit * 100)
+    if (usedPercent === undefined) continue
+    const window = record(item.window) ?? item
+    const duration = numeric(window.duration ?? item.duration ?? detail.duration)
+    const unit = String(window.timeUnit ?? item.timeUnit ?? detail.timeUnit ?? '').toUpperCase()
+    const multiplier = unit.includes('MINUTE') ? 60_000 : unit.includes('HOUR') ? 3_600_000
+      : unit.includes('DAY') ? 86_400_000 : unit.includes('SECOND') ? 1000 : undefined
+    const durationMs = duration === undefined || duration <= 0 || multiplier === undefined
+      ? undefined : duration * multiplier
+    const kind = durationMs === 18_000_000 ? 'session' : durationMs === 604_800_000 ? 'weekly' : 'other'
+    const resetsAt = kimiReset(detail)
+    const scope = detail.name ?? detail.title ?? item.name ?? item.title
+    modern.push({ kind, usedPercent,
+      ...(typeof scope === 'string' ? { scope } : {}),
+      ...(resetsAt === undefined ? {} : { resetsAt }),
+      ...(durationMs === undefined ? {} : { windowDurationMs: durationMs }),
+      // Legacy weekly plans reset as whole seven-day buckets; five-hour semantics
+      // are documented as rolling, so no fixed-window assertion is made there.
+      ...(kind === 'weekly' ? { fixedWindow: true } : {}),
+    })
+  }
+  if (modern.length) return { supported: true, windows: modern, plan: 'Kimi Code' }
   const usages = record(body.usages)
-  if (usages === undefined) throw new Error('Kimi Code usage response has no usages object')
+  if (usages === undefined) throw new Error('Kimi Code usage response has no valid windows')
 
   const windows: UsageWindow[] = []
   for (const [field, kind, scope] of [
@@ -87,6 +142,7 @@ export async function fetchKimiCodeUsage(
       kind,
       ...(scope === undefined ? {} : { scope }),
       usedPercent: ratio * 100,
+      ...(field === 'limit_7d' ? { fixedWindow: true, windowDurationMs: 604_800_000 } : {}),
       ...(resetsAt === undefined ? {} : { resetsAt }),
     })
   }

@@ -26,7 +26,7 @@ export const USAGE_PERCENT = {
 }
 
 /** The collapsed pill for the selected Codex model: the default account's 5-hour window. */
-export const CODEX_PILL = `Codex 5h ${USAGE_PERCENT.codex.percent}%`
+export const CODEX_PILL = 'Codex '
 
 /** The fixture Cursor access token; its `sub` is `auth0|user_bar`. */
 const CURSOR_ACCESS = 'fake.eyJzdWIiOiJhdXRoMHx1c2VyX2JhciIsImV4cCI6NDEwMjQ0NDgwMH0.sig'
@@ -56,13 +56,13 @@ export const FIXTURE_REQUESTS = {
     credential: ['authorization', 'Bearer fake-codex-access'],
     body: {
       plan_type: 'plus',
-      rate_limit: { primary_window: { used_percent: USAGE_PERCENT.codex.percent, limit_window_seconds: 18_000 } },
+      rate_limit: { primary_window: { used_percent: USAGE_PERCENT.codex.percent, limit_window_seconds: 18_000, reset_at: Math.floor((fixtureNow + 4 * 60 * 60_000) / 1000) } },
     },
     required: true,
   },
   'GET https://api.anthropic.com/api/oauth/usage': {
     credential: ['authorization', 'Bearer fake-claude-access'],
-    body: { five_hour: { utilization: USAGE_PERCENT.claude.percent } },
+    body: { five_hour: { utilization: USAGE_PERCENT.claude.percent, resets_at: new Date(fixtureNow + 4 * 60 * 60_000).toISOString() } },
     required: true,
   },
   'GET https://cli-chat-proxy.grok.com/v1/billing?format=credits': {
@@ -94,7 +94,7 @@ export const FIXTURE_REQUESTS = {
   },
   'GET https://opencode.ai/zen/go/v1/usage': {
     credential: ['authorization', 'Bearer fake-opencode-key'],
-    body: { usage: { rolling: { percent: USAGE_PERCENT['opencode-go'].percent } } },
+    body: { usage: { rolling: { percent: USAGE_PERCENT['opencode-go'].percent, resetsAt: new Date(fixtureNow + 4 * 60 * 60_000).toISOString() } } },
     required: true,
   },
   'GET https://api.kimi.com/coding/v1/usages': {
