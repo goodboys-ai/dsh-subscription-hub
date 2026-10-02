@@ -86,6 +86,8 @@ disclosure.
 Quota bars include a dark elapsed-time cursor when a fresh reading has a
 known window interval. Compare the colored fill (quota used) with the
 cursor (time elapsed); hover for the percentages and reset countdown.
+Standard coloring turns the fill orange when usage leads elapsed time by
+10 points, and Relaxed uses 15; 90% used turns it red and takes priority.
 Stale readings and windows without known timing omit the cursor. Choose
 Standard, Relaxed, or Remaining colors in **Settings → Subscriptions**.
 
