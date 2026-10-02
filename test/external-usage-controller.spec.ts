@@ -69,7 +69,7 @@ test('MiniMax regions resolve subscription refs and forward cancellation', async
     const controller = new ExternalUsageController(async name => name === ref ? { value: 'secret' } : undefined, http)
     assert.equal((await controller.status())[source].configured, true)
     assert.ok(!JSON.stringify(await controller.status()).includes('secret'))
-    assert.equal((await controller.usage(source, signal)).windows[0]!.usedPercent, 75)
+    assert.equal((await controller.usage(source, signal)).windows![0]!.usedPercent, 75)
   }
 })
 
