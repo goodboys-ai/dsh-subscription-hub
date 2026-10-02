@@ -1,12 +1,19 @@
 # Changelog
 
-## Unreleased
+## v0.1.2 — 2026-10-02
 
-- The subscription usage dialog takes the host's backdrop blur alongside its translucent menu fill, the way the host's own stat dialog does. Without the blur the conversation behind the dialog stayed sharp enough to read through the panel.
+- Usage meters show elapsed-time markers and Standard, Relaxed, or Remaining
+  coloring presets. Provider timing and MiniMax usage handling were fixed.
+- Built-in Codex and Copilot fallback catalogs include GPT-6-era models;
+  live provider discovery remains authoritative.
+- The subscription usage dialog uses the host's backdrop blur alongside its
+  translucent menu fill, keeping the transcript behind it from showing sharply.
 - The Plugin Manager card and the Settings plugin inventory now show a
   localized title and description (`DSH Subscriptions` / `订阅中心`) instead
   of falling back to the English package description, and the plugin card
   shows a dedicated icon.
+- Live-provider canaries are optional rather than a stable-release gate;
+  remaining live-provider gaps must be disclosed in release notes.
 
 ## v0.1.1 — 2026-10-01
 

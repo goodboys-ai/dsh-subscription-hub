@@ -139,7 +139,7 @@ spec (`#vX.Y.Z`); see the
 
 ## Verification and limits
 
-CI builds, tests, and boots a packed tarball on both supported DSH versions;
+CI builds, tests, and boots a packed tarball on all supported DSH versions;
 it does not run the GitHub source install's `prepare` step. Offline
 provider tests check recorded API responses, so a passing CI run cannot prove
 that a provider still accepts live sign-in or model requests. See

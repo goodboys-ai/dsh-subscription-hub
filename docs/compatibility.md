@@ -92,10 +92,10 @@ That exemption is an at-your-own-risk escape hatch, not support.
 
 ## Compatibility table
 
-Current source version `0.1.0`, peers `>=0.1.7-rc.2 <0.3.0-0`. Gate
-results below are from local runs on 2026-09-30; the CI matrix runs the
-identical gates on every push. A cell becomes ✅ only from a green gate run,
-never from "it should work".
+The source targets `0.1.2`, with peers `>=0.1.7-rc.2 <0.3.0-0`. Gate
+results below were first recorded locally on 2026-09-30 and confirmed by
+main CI on 2026-10-02. The CI matrix runs identical gates on every push. A
+cell becomes ✅ only from a green gate run, never from "it should work".
 
 | DSH | build | tests | host exports | host contract | boot smoke | host E2E | Notes |
 |-----|-------|-------|--------------|---------------|------------|----------|-------|
@@ -113,7 +113,7 @@ The plugin uses semver independently of DSH (`0.1.0`, `0.1.1`, …). During the
 keeps the old window, and a minor for a new provider, a breaking setting, or
 dropped DSH support. A peer-range move still requires a new plugin version
 and tag; it does not create one plugin release line per DSH minor. The
-current source version `0.1.0` supports a three-version window
+current source version `0.1.2` supports a three-version window
 (`0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2`), so its minor version cannot
 identify one DSH minor. The peer range and CI matrix state host
 compatibility; plugin patches can ship between DSH releases.
@@ -167,13 +167,13 @@ not pre-created.
    the nightly `next-host` job has usually run these checks against it
    already, on a nightly-only tarball whose peers admit it; an open
    `Nightly: DSH <version> breaks …` issue names the checks that failed.
-3. **Check live behavior.** Run the [manual canary](testing.md#pre-release-canary-manual--not-a-test-layer)
-   from the PR commit in isolated profiles on each supported DSH version.
-   Check provider login, usage, and a model request, plus usage-only sources
-   and changed tools. Record the date and each result, including checks not
-   run, in the README's [verification section](../README.md#verification-and-limits).
-   If live checks remain open, use a plugin prerelease version and state the
-   gaps in its GitHub Release.
+3. **Disclose live coverage.** The [manual canary](testing.md#pre-release-canary-manual--not-a-test-layer)
+   is optional and does not gate a stable release. When run, use isolated
+   profiles to check provider login, usage, and a model request, plus
+   usage-only sources and changed tools. Record the date and each result in
+   the README's [verification section](../README.md#verification-and-limits).
+   State remaining live-provider gaps in the GitHub Release; passing the
+   automated gate does not prove that providers still accept live requests.
 4. **Check the merge commit.** Merge through a PR and confirm its CI gate.
    CI boots a packed tarball, while a GitHub source install also runs
    `prepare`. On each supported DSH version, install
@@ -232,10 +232,11 @@ not pre-created.
 - **Provider-side changes.** When ChatGPT, Claude, Grok, Copilot, Antigravity,
   or Cursor change their login or API surface, the plugin can break on *every*
   DSH version at once. Neither the DSH matrix nor offline virtual-provider
-  tests detect provider-side drift. The manual canary in
-  [testing.md](testing.md) checks live behavior before a release.
+  tests detect provider-side drift. The optional manual canary in
+  [testing.md](testing.md) checks live behavior; unverified live behavior
+  does not block a stable release and must be disclosed.
 - **Forward compatibility.** A new DSH RC can break the plugin; the policy
-  guarantees a *process* (detect → gate → canary → tag), not that `main` works
+  guarantees a *process* (detect → gate → disclose → tag), not that `main` works
   on a DSH released yesterday. The nightly `next-host` job shortens the
   detect step: it runs the host-export and host contract checks, the boot
   smoke, and the host E2E against the newest published DSH and opens an issue when one of them finds a break.
