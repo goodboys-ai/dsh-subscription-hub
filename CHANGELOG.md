@@ -4,7 +4,7 @@
 
 - The subscription usage dialog takes the host's backdrop blur alongside its translucent menu fill, the way the host's own stat dialog does. Without the blur the conversation behind the dialog stayed sharp enough to read through the panel.
 - The Plugin Manager card and the Settings plugin inventory now show a
-  localized title and description (`Subscription Hub` / `订阅中心`) instead
+  localized title and description (`DSH Subscriptions` / `订阅中心`) instead
   of falling back to the English package description, and the plugin card
   shows a dedicated icon.
 

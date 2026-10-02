@@ -61,11 +61,13 @@ test('npm name, plugin name, client bundle id, and cordis insert name agree', ()
 
 function nonEmptyString(value: unknown, file: string, field: string): string {
   assert.equal(typeof value, 'string', `${file} meta.${field} must be a string`)
-  assert.ok((value as string).length > 0, `${file} meta.${field} must be non-empty`)
+  assert.ok((value as string).trim().length > 0, `${file} meta.${field} must be non-empty`)
   return value as string
 }
 
-test('locale display metadata is present, valid, and reachable from the packed package', () => {
+// Source and manifest checks only; tarball contents and host rendering need
+// separate pack and UI verification.
+test('locale display metadata and package inclusion declarations are valid', () => {
   const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
 
   for (const locale of ['en', 'zh']) {
@@ -74,6 +76,7 @@ test('locale display metadata is present, valid, and reachable from the packed p
     assert.ok(meta && typeof meta === 'object', `${rel} must define a meta object`)
     const title = nonEmptyString(meta.title, rel, 'title')
     const description = nonEmptyString(meta.description, rel, 'description')
+    assert.equal(title, locale === 'en' ? 'DSH Subscriptions' : '订阅中心')
     // Guard against a copy-paste locale that ships one language twice.
     if (locale === 'zh') {
       const enMeta = JSON.parse(readFileSync(join(repoRoot, 'locale/en.json'), 'utf8')).meta
@@ -94,9 +97,8 @@ test('locale display metadata is present, valid, and reachable from the packed p
     )
   }
 
-  // The icon declaration must resolve to a self-contained image inside the
-  // package directory: relative path, no parent escape, supported type,
-  // within the 256 KiB host limit.
+  // Check the declared local icon's path, type, and size. These assertions
+  // do not validate SVG contents or the host's rendered image.
   const icon = pkg.icon
   assert.equal(typeof icon, 'string', 'package.json must declare a top-level icon')
   assert.ok(icon.startsWith('./'), `icon path must be relative to the package root (got ${icon})`)

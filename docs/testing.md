@@ -442,6 +442,7 @@ Issue and PR numbers refer to the upstream tracker,
 
 | Bug | What broke | Re-introduced as | Specs that failed |
 |---|---|---|---|
+| Plugin display metadata | The card and Settings inventory fell back to English package metadata in Chinese UI | Remove the locale export or duplicate English metadata into `zh.json` | `package-identity` (source and manifest checks; packed assets and rendering verified separately) |
 | Usage dialog surface | The dialog kept the host's translucent menu fill without its backdrop blur, so the transcript behind it stayed readable through the panel | `styles.panel` drops `backdrop-filter` | host E2E (`host-e2e.mjs`, dialog surface) |
 | [PR #116](https://github.com/V1ki/dsh-plugin-subscriptions/pull/116) | DSH 0.1.7 renamed the host icons, and the badge lost its glyphs | `hostIcon` reads only `Icon<Name>16` | `host-icons`, `subscription-usage-badge` |
 | [#80](https://github.com/V1ki/dsh-plugin-subscriptions/issues/80) | Every `/subscriptions-auth` RPC answered 405, so login was impossible | Routes registered as `/subscriptions-auth/<endpoint>` instead of `/api/subscriptions-auth.<endpoint>` | `login`, `rpc`, `model-defaults-rpc`, `provider-settings-rpc`, `usage-bar` |
