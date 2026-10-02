@@ -1,4 +1,7 @@
-# DSH Subscription Hub
+# DSH Subscriptions
+
+[![npm version](https://img.shields.io/npm/v/dsh-subscriptions)](https://www.npmjs.com/package/dsh-subscriptions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Bring your AI subscriptions into
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). One
@@ -23,12 +26,74 @@ reported quota in **Settings → Subscriptions**.
   image generation and editing, and Grok video generation when the matching
   provider is enabled.
 
+## Screenshots
+
+Captured against DSH 0.2.0-rc.2 in the web UI with a local stub serving
+frozen provider responses, so each image shows a product state rather than
+a real account. Identities in the images are fabricated, and the quota
+percentages, catalogs, and reset countdowns are sample data.
+
+### Subscriptions
+
+Per-provider quota windows, account controls, and the status-bar display
+preference live in **Settings → Subscriptions**.
+
+![Subscriptions settings page](docs/images/subscriptions.png)
+
+### Model selection
+
+Logged-in providers join the session model picker with their live catalogs.
+
+![Model picker with subscription models](docs/images/model-picker.png)
+
+Models that advertise reasoning levels get an **Effort** selector in the
+same menu. Levels and defaults come from the provider's live catalog;
+without discovery Codex falls back to a built-in list, and a configured
+default overrides either.
+
+![Reasoning effort selector](docs/images/model-effort.png)
+
+Codex models whose catalog advertises the fast tier get a **Speed** toggle
+in the composer's tool row: Standard or Fast, per session.
+
+![Speed toggle with the Standard/Fast menu open](docs/images/speed-toggle.png)
+
+**Settings → Subscriptions → provider → Manage** edits account aliases,
+pool participation, model allowlists, and the per-model effort, context,
+and tool settings.
+
+![Model settings](docs/images/model-settings.png)
+
+![Provider tools](docs/images/provider-tools.png)
+
+### Quota while you work
+
+The composer's stats row gains a **subscription usage** pill showing the
+used percentage and reset window for the provider of the session's current
+model. It shows at most one provider; switching to a non-subscription model
+keeps the most recent subscription selected in the mounted conversation
+view, or stays hidden if there is none.
+
+![Subscription usage pill in the stats row](docs/images/usage-pill.png)
+
+Click the pill to expand every provider and account that reports usage —
+the default account is starred, and the current provider is listed first.
+A provider with no usage endpoint, such as GitHub Copilot, has no row, and
+neither do accounts without a usage window. Antigravity previews only the
+current model's windows; the other model windows stay in a closed
+disclosure.
+
+![Subscription usage pill expanded](docs/images/usage-badge.png)
+
 ## Install
 
 Current source is tested with DSH `0.1.7-rc.2`, `0.2.0-rc.1`, and
 `0.2.0-rc.2`. The package's peers admit `>=0.1.7-rc.2 <0.3.0-0`: untested
-versions inside that range install but are unsupported, and versions outside
-it need an explicit `dsh plugin allow-version` exemption. See
+versions inside that range install but are unsupported, and versions
+outside it need an explicit `dsh plugin allow-version` exemption.
+`dsh plugin add` checks those ranges with `includePrerelease` semantics, so
+the admitted set covers every host build from `0.1.7-rc.2` through the
+whole `0.2.x` line, prereleases included, and blocks the `0.3.0` line. See
 [docs/compatibility.md](docs/compatibility.md)
 for the support window and [docs/testing.md](docs/testing.md) for the test
 layers. With `dsh` available, install the plugin into the web profile from

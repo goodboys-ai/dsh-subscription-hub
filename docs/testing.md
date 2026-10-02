@@ -304,7 +304,7 @@ script:
      source's fixture percentage (exact up to float rounding) as its only
      window, and Copilot reports no usage support. Every source has a distinct percentage, so a row showing
      another source's number fails;
-   - the host's model picker lists the plugin's `GPT-5.1 Codex`;
+   - the host's model picker lists the plugin's `GPT-6-Astra`;
    - a message to that model streams through the plugin's Codex adapter,
      and the canned reply renders in the transcript;
    - the usage pill (`Codex 5h 11%`) renders inside the host's stats row
