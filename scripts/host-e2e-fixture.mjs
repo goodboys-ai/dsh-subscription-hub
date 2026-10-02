@@ -7,7 +7,7 @@
 export const CODEX_REPLY = 'Hello from the Codex fixture.'
 
 /** Model the driver selects; the canned stream answers only this model. */
-export const CODEX_MODEL = { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex' }
+export const CODEX_MODEL = { id: 'gpt-6-astra', name: 'GPT-6-Astra' }
 
 /**
  * Used percent each usage source reports, and the name the badge dialog
@@ -118,7 +118,7 @@ export const FIXTURE_REQUESTS = {
  * Provider requests the preload refuses on purpose. They are model catalog
  * discovery and the client-version lookups behind it. The plugin must
  * survive them offline, with the picker still built from its static model
- * list, and the driver asserts that by finding GPT-5.1 Codex there. A
+ * list, and the driver asserts that by finding GPT-6-Astra there. A
  * refusal of anything not listed here fails the E2E. Entries ending in `:443`
  * are raw TLS hosts (the Cursor transport does not go through fetch); the
  * rest are URL prefixes.

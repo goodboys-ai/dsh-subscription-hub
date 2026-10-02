@@ -250,10 +250,15 @@ export const Config: z<Config> = z.object({
 
 /** Built-in catalogs used when the config does not override a provider's models. */
 const DEFAULT_MODELS: Record<ProviderId, ModelEntry[]> = {
+  // Static fallback only: the authenticated /codex/models discovery wins
+  // whenever it succeeds. List refreshed 2026-10-01 from the live catalog
+  // (gpt-5.1-era entries replaced by the gpt-6-astra / gpt-5.6 family).
   codex: [
-    { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex' },
-    { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini' },
-    { id: 'gpt-5.1', name: 'GPT-5.1' },
+    { id: 'gpt-6-astra', name: 'GPT-6-Astra', contextWindow: 272_000 },
+    { id: 'gpt-5.6-sol', name: 'GPT-5.6-Sol', contextWindow: 272_000 },
+    { id: 'gpt-5.6-terra', name: 'GPT-5.6-Terra', contextWindow: 272_000 },
+    { id: 'gpt-5.6-luna', name: 'GPT-5.6-Luna', contextWindow: 272_000 },
+    { id: 'gpt-5.5', name: 'GPT-5.5', contextWindow: 272_000 },
   ],
   claude: [
     { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', maxTokens: 128_000, contextWindow: 1_000_000 },
@@ -268,12 +273,14 @@ const DEFAULT_MODELS: Record<ProviderId, ModelEntry[]> = {
     { id: 'grok-code-fast-1', name: 'Grok Code Fast 1' },
   ],
   // Static fallback only: the live /models catalog (with per-model vision
-  // flags and context windows) wins whenever discovery succeeds.
+  // flags and context windows) wins whenever discovery succeeds. Refreshed
+  // 2026-10-01: Copilot now carries the GPT-6 family, which — like the
+  // gpt-5.5/5.6 families — only speaks /responses.
   copilot: [
-    { id: 'gpt-4.1', name: 'GPT-4.1', inputModalities: ['text', 'image'] },
-    { id: 'gpt-4o', name: 'GPT-4o', inputModalities: ['text', 'image'] },
-    { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', inputModalities: ['text', 'image'] },
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', inputModalities: ['text', 'image'] },
+    { id: 'gpt-6-sol', name: 'GPT-6 Sol', inputModalities: ['text', 'image'], wire: 'responses' },
+    { id: 'gpt-6-luna', name: 'GPT-6 Luna', inputModalities: ['text', 'image'], wire: 'responses' },
+    { id: 'gpt-5.5', name: 'GPT-5.5', inputModalities: ['text', 'image'], wire: 'responses' },
+    { id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5', inputModalities: ['text', 'image'] },
   ],
   // Static fallback only; the authenticated fetchAvailableModels response wins.
   antigravity: [
