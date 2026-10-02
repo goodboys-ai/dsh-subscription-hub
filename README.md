@@ -68,13 +68,13 @@ and tool settings.
 
 ### Quota while you work
 
-The composer's stats row gains a **subscription usage** pill showing the
+The composer's stats row gains a **provider usage** pill showing the
 used percentage and reset window for the provider of the session's current
 model. It shows at most one provider; switching to a non-subscription model
 keeps the most recent subscription selected in the mounted conversation
 view, or stays hidden if there is none.
 
-![Subscription usage pill in the stats row](docs/images/usage-pill.png)
+![Provider usage pill in the stats row](docs/images/usage-pill.png)
 
 Click the pill to expand every provider and account that reports usage —
 the default account is starred, and the current provider is listed first.
@@ -83,7 +83,15 @@ neither do accounts without a usage window. Antigravity previews only the
 current model's windows; the other model windows stay in a closed
 disclosure.
 
-![Subscription usage pill expanded](docs/images/usage-badge.png)
+Quota bars include a dark elapsed-time cursor when a fresh reading has a
+known window interval. Compare the colored fill (quota used) with the
+cursor (time elapsed); hover for the percentages and reset countdown.
+Standard coloring turns the fill orange when usage leads elapsed time by
+10 points, and Relaxed uses 15; 90% used turns it red and takes priority.
+Stale readings and windows without known timing omit the cursor. Choose
+Standard, Relaxed, or Remaining colors in **Settings → Subscriptions**.
+
+![Usage dialog with elapsed-time cursors](docs/images/usage-badge.png)
 
 ## Install
 
